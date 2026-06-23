@@ -1,0 +1,24 @@
+# Simulation outputs
+sim_build/
+__pycache__/
+*.vcd
+*.fst
+*.lxt
+*.log
+*.xml
+results.xml
+
+# Verilator
+obj_dir/
+*.d
+
+# Python
+*.pyc
+.pytest_cache/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
