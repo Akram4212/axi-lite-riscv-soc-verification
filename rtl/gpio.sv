@@ -88,6 +88,15 @@ module gpio #(
     // different cycles, so we store them until both are valid.
     // ========================================================
     logic [ADDR_WIDTH-1:0]     awaddr_buf;
+    // Upper address bits are intentionally unused inside this local GPIO slave.
+    // The SoC-level AXI-Lite interconnect will handle full address decoding.
+    logic unused_addr_bits;
+
+    assign unused_addr_bits = &{
+        1'b0,
+        S_AXI_ARADDR[ADDR_WIDTH-1:6],
+        awaddr_buf[ADDR_WIDTH-1:6]
+    };
     logic [DATA_WIDTH-1:0]     wdata_buf;
     logic [(DATA_WIDTH/8)-1:0] wstrb_buf;
 
@@ -163,7 +172,7 @@ module gpio #(
     // ========================================================
     // AXI4-Lite Write Logic
     // ========================================================
-      always_ff @(posedge ACLK, negedge ARESETn) begin
+      always_ff @(posedge ACLK) begin
         if (!ARESETn) begin
             awaddr_buf   <= '0;
             wdata_buf    <= '0;

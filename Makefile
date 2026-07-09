@@ -236,7 +236,7 @@ synth_gpio:
 # ============================================================
 
 .PHONY: clean
-clean:
+clean::
 	rm -rf sim_build
 	rm -rf obj_dir
 	rm -rf __pycache__
