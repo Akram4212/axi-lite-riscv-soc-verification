@@ -1,39 +1,90 @@
-# Cocotb-Based Verification of an AXI-Lite RISC-V SoC
+# AXI-Lite RISC-V SoC Verification Platform
 
 ## Overview
-This project implements and verifies a small AXI-Lite based RISC-V SoC with memory-mapped GPIO and timer peripherals.
 
-## Features
-- RV32I-style simple processor core
-- AXI-Lite interconnect
-- GPIO peripheral
-- timer peripheral
-- RAM
-- Python/cocotb verification environment
-- Directed and randomized tests
-- AXI-Lite protocol checks
-- Regression script
-- GTKWave waveform debug
+This project implements and verifies an AXI-Lite based RISC-V SoC using open-source EDA tools. The project focuses on RTL quality, protocol verification, and verification automation using Python and cocotb.
 
-## Verification Plan
-| Test | Purpose | Status |
-|---|---|---|
-| GPIO read/write | Verify GPIO register access | PASS |
-| GPIO reset | Verify reset clears registers | PASS |
-| Timer count | Verify timer increments | PASS |
-| AXI decode | Verify address mapping | PASS |
-| Invalid address | Verify error response | PASS |
-| SoC program | Verify RISC-V program controls GPIO | PASS |
+---
 
-## How to Run
-make test_gpio
-make test_timer
-make regression
+## Current Progress
+
+### Completed
+- ✅ WSL/Linux development environment
+- ✅ Git/GitHub workflow
+- ✅ Verilator 5.038 installation
+- ✅ cocotb environment setup
+- ✅ AXI-Lite GPIO peripheral
+- ✅ GPIO register map
+- ✅ GPIO passes Verilator lint (`-Wall`)
+
+### In Progress
+- 🚧 cocotb GPIO testbench
+- 🚧 Makefile automation
+
+### Planned
+- AXI-Lite Timer peripheral
+- AXI-Lite Interconnect
+- RAM model
+- RV32I Processor Core
+- SoC Top Module
+- Directed verification
+- Randomized verification
+- Regression testing
+- Functional coverage
+- GTKWave debug
+- CI/CD with GitHub Actions
+
+---
+
+## Repository Structure
+
+```
+rtl/
+include/
+tb/
+firmware/
+scripts/
+docs/
+```
+
+---
 
 ## Tools
-- VS Code
-- WSL Ubuntu
-- Verilator
+
+- SystemVerilog
+- Python
 - cocotb
+- Verilator
 - GTKWave
 - Yosys
+- Git
+- VS Code
+- WSL Ubuntu
+
+---
+
+## Development Roadmap
+
+| Milestone | Status |
+|-----------|--------|
+| Development environment | ✅ Complete |
+| GPIO RTL | ✅ Complete |
+| GPIO Verilator lint | ✅ Complete |
+| GPIO cocotb testbench | 🚧 In Progress |
+| Timer peripheral | ⏳ Planned |
+| AXI-Lite interconnect | ⏳ Planned |
+| RISC-V Core | ⏳ Planned |
+| Full SoC integration | ⏳ Planned |
+| Regression suite | ⏳ Planned |
+
+---
+
+## Current Verification Status
+
+| Check | Status |
+|--------|--------|
+| Verilator lint | ✅ PASS |
+| cocotb simulation | 🚧 Not Started |
+| Directed tests | ⏳ Planned |
+| Random tests | ⏳ Planned |
+| Regression | ⏳ Planned |
