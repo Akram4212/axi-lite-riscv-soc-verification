@@ -1,13 +1,15 @@
 import cocotb
+import random
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge, Timer, ClockCycles
-
 
 #GPIO register offset
 GPIO_DATA_OUT = 0x00
 GPIO_DATA_IN = 0x04
 GPIO_DATA_DIR = 0x08
 
+GPIO_DATA_OUT_SET = 0x0C
+GPIO_DATA_OUT_CLR = 0x10
 # AXI RESPONSE VALUES
 AXI_OKAY = 0
 AXI_SLVERR = 2
@@ -49,76 +51,103 @@ async def reset_dut(dut):
 
 async def axi_write(dut, addr, data, strobe=0xF):
     """
-    Perform an AXI write transaction to the GPIO DUT.
+    Perform one AXI-Lite write transaction.
+
+    Returns:
+        BRESP value
     """
-    # Set up the write address channel
+
     dut.S_AXI_AWADDR.value = addr
     dut.S_AXI_AWVALID.value = 1
 
-    # Set up the write data channel
     dut.S_AXI_WDATA.value = data
     dut.S_AXI_WSTRB.value = strobe
     dut.S_AXI_WVALID.value = 1
 
     dut.S_AXI_BREADY.value = 1
-    
+
     aw_done = False
     w_done = False
 
-    # Wait for the DUT to accept the write address and data
-    while not (dut.S_AXI_AWREADY.value and dut.S_AXI_WREADY.value):
+    while not (aw_done and w_done):
         await RisingEdge(dut.ACLK)
 
-        if dut.S_AXI_AWVALID.value and dut.S_AXI_AWREADY.value:
-            dut.S_AXI_AWVALID.value = 0  # Deassert AWVALID after address is accepted
+        if int(dut.S_AXI_AWVALID.value) and int(dut.S_AXI_AWREADY.value):
+            dut.S_AXI_AWVALID.value = 0
             aw_done = True
-        
-        if dut.S_AXI_WVALID.value and dut.S_AXI_WREADY.value:
-            dut.S_AXI_WVALID.value = 0  # Deassert WVALID after data is accepted
+
+        if int(dut.S_AXI_WVALID.value) and int(dut.S_AXI_WREADY.value):
+            dut.S_AXI_WVALID.value = 0
             w_done = True
 
-    #wait for write response
-    while not dut.S_AXI_BVALID.value:
+    # Avoid accidental double-acceptance of the same write
+    await RisingEdge(dut.ACLK)
+
+    while not int(dut.S_AXI_BVALID.value):
         await RisingEdge(dut.ACLK)
 
     bresp = int(dut.S_AXI_BRESP.value)
 
-    #complete B channel handshake
     await RisingEdge(dut.ACLK)
     dut.S_AXI_BREADY.value = 0
 
+    # Give register updates time to settle before the next AXI access
+    await ClockCycles(dut.ACLK, 2)
+
     return bresp
+
+
 async def axi_read(dut, addr):
     """
     Perform one AXI-Lite read transaction.
 
-    Returns:
-        data, RRESP value
+    This version first clears any stale/pending RVALID response before
+    issuing a new ARVALID request.
     """
-    # Set up the read address channel
+
+    # ------------------------------------------------------------
+    # Clear any stale read response from a previous transaction
+    # ------------------------------------------------------------
+    dut.S_AXI_ARVALID.value = 0
+    dut.S_AXI_RREADY.value = 1
+
+    await ClockCycles(dut.ACLK, 2)
+
+    dut.S_AXI_RREADY.value = 0
+    await ClockCycles(dut.ACLK, 1)
+
+    # ------------------------------------------------------------
+    # Issue read address
+    # ------------------------------------------------------------
     dut.S_AXI_ARADDR.value = addr
     dut.S_AXI_ARVALID.value = 1
 
-    dut.S_AXI_RREADY.value = 1
-
-    # Wait for the DUT to accept the read address
-    while not dut.S_AXI_ARREADY.value:
+    # Wait for AR handshake
+    while True:
         await RisingEdge(dut.ACLK)
 
-    # Deassert ARVALID after address is accepted
+        if int(dut.S_AXI_ARREADY.value):
+            dut.S_AXI_ARVALID.value = 0
+            break
+
+    # ------------------------------------------------------------
+    # Wait for fresh read response
+    # ------------------------------------------------------------
+    while not int(dut.S_AXI_RVALID.value):
+        await RisingEdge(dut.ACLK)
+
+    # Wait one extra edge so RDATA is stable after nonblocking RTL update
     await RisingEdge(dut.ACLK)
-    dut.S_AXI_ARVALID.value = 0
-
-    # Wait for the read data to be valid
-    while not dut.S_AXI_RVALID.value:
-        await RisingEdge(dut.ACLK)
 
     data = int(dut.S_AXI_RDATA.value)
     rresp = int(dut.S_AXI_RRESP.value)
 
     # Complete R channel handshake
+    dut.S_AXI_RREADY.value = 1
     await RisingEdge(dut.ACLK)
+
     dut.S_AXI_RREADY.value = 0
+    await RisingEdge(dut.ACLK)
 
     return data, rresp
 
@@ -178,3 +207,196 @@ async def test_gpio_basic_read_write(dut):
 
     # Check actual GPIO output enable
     assert int(dut.gpio_oe.value) == 0x000000FF, f"gpio_oe mismatch, got {int(dut.gpio_oe.value):#010x}"
+
+@cocotb.test()
+async def test_gpio_input_read(dut):
+    """
+    Verify that DATA_IN reflects the extternal gpio_i input pins.
+    """
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_dut(dut)
+
+    # Set gpio_i to a known value
+    dut.gpio_i.value = 0x0000003C
+    await ClockCycles(dut.ACLK, 2)
+
+    # Read DATA_IN
+    data, rresp = await axi_read(dut, GPIO_DATA_IN)
+
+    assert rresp == AXI_OKAY, f"Expected OKAY read response, got {rresp}"
+    assert data == 0x0000003C, f"Expected DATA_IN=0x3C, got {data:#010x}"
+
+@cocotb.test()
+async def test_gpio_set_clear(dut):
+    """
+    Verify that DATA_OUT_SET and DATA_OUT_CLR registers work as expected.
+    """
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_dut(dut)
+
+    # Write initial value to DATA_OUT
+    bresp = await axi_write(dut, GPIO_DATA_OUT, 0x00000000)
+    assert bresp == AXI_OKAY, f"Expected OKAY write response, got {bresp}"
+
+    # Set bits using DATA_OUT_SET
+    bresp = await axi_write(dut, GPIO_DATA_OUT_SET, 0x0000000F)
+    assert bresp == AXI_OKAY, f"Expected OKAY write response, got {bresp}"
+
+    # Read back DATA_OUT
+    data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+    assert rresp == AXI_OKAY, f"Expected OKAY read response, got {rresp}"
+    assert data == 0x0000000F, f"Expected DATA_OUT=0x0F after set, got {data:#010x}"
+
+    assert int(dut.gpio_o.value) == 0x0000000F, \
+        f"gpio_o mismatch after set, got {int(dut.gpio_o.value):#010x}"
+
+    # Clear bits 0 and 2: 0x0F & ~0x05 = 0x0A
+    bresp = await axi_write(dut, GPIO_DATA_OUT_CLR, 0x00000005)
+    assert bresp == AXI_OKAY, f"Expected OKAY write response, got {bresp}"
+
+    data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+    assert rresp == AXI_OKAY, f"Expected OKAY read response, got {rresp}"
+    assert data == 0x0000000A, f"Expected DATA_OUT=0x0A after clear, got {data:#010x}"
+
+    assert int(dut.gpio_o.value) == 0x0000000A, \
+        f"gpio_o mismatch after clear, got {int(dut.gpio_o.value):#010x}"
+
+@cocotb.test()
+async def test_gpio_invalid_write_to_input_register(dut):
+    """
+    Verify that writing to the DATA_IN register does not change its value.
+    """
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_dut(dut)
+
+    bresp = await axi_write(dut, GPIO_DATA_IN, 0x00000012)
+    assert bresp == AXI_SLVERR, \
+        f"Expected SLVERR write response when writing to DATA_IN, got {bresp}"
+
+@cocotb.test()
+async def test_gpio_byte_strobe(dut):
+    """
+    Verify that WSTRB updates only the specified bytes in DATA_OUT.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_dut(dut)
+
+    # Initial full write
+    bresp = await axi_write(dut, GPIO_DATA_OUT, 0xAABBCCDD)
+    assert bresp == AXI_OKAY, f"Expected OKAY write response, got {bresp}"
+
+    await ClockCycles(dut.ACLK, 3)
+
+    data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+    assert rresp == AXI_OKAY
+    assert data == 0xAABBCCDD, f"Expected DATA_OUT=0xAABBCCDD, got {data:#010x}"
+    assert int(dut.gpio_o.value) == 0xAABBCCDD
+
+    # ------------------------------------------------------------
+    # Update byte 0 only: DD -> 11
+    # Expected: AABBCCDD -> AABBCC11
+    # ------------------------------------------------------------
+    bresp = await axi_write(dut, GPIO_DATA_OUT, 0x00000011, strobe=0b0001)
+    assert bresp == AXI_OKAY
+
+    await ClockCycles(dut.ACLK, 5)
+
+    gpio_value = int(dut.gpio_o.value)
+    dut._log.info(f"After byte 0 write before read: gpio_o={gpio_value:#010x}")
+    assert gpio_value == 0xAABBCC11, f"gpio_o expected 0xAABBCC11, got {gpio_value:#010x}"
+
+    data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+    dut._log.info(f"After byte 0 read: DATA_OUT={data:#010x}, gpio_o={int(dut.gpio_o.value):#010x}")
+
+    assert rresp == AXI_OKAY
+    assert data == 0xAABBCC11, f"Expected DATA_OUT=0xAABBCC11 after byte 0 update, got {data:#010x}"
+
+    # ------------------------------------------------------------
+    # Update byte 1 only: CC -> 22
+    # Expected: AABBCC11 -> AABB2211
+    # ------------------------------------------------------------
+    bresp = await axi_write(dut, GPIO_DATA_OUT, 0x00002200, strobe=0b0010)
+    assert bresp == AXI_OKAY
+
+    await ClockCycles(dut.ACLK, 5)
+
+    data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+    dut._log.info(f"After byte 1 read: DATA_OUT={data:#010x}, gpio_o={int(dut.gpio_o.value):#010x}")
+
+    assert rresp == AXI_OKAY
+    assert data == 0xAABB2211, f"Expected DATA_OUT=0xAABB2211 after byte 1 update, got {data:#010x}"
+
+    # ------------------------------------------------------------
+    # Update byte 2 only: BB -> 33
+    # Expected: AABB2211 -> AA332211
+    # ------------------------------------------------------------
+    bresp = await axi_write(dut, GPIO_DATA_OUT, 0x00330000, strobe=0b0100)
+    assert bresp == AXI_OKAY
+
+    await ClockCycles(dut.ACLK, 5)
+
+    data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+    dut._log.info(f"After byte 2 read: DATA_OUT={data:#010x}, gpio_o={int(dut.gpio_o.value):#010x}")
+
+    assert rresp == AXI_OKAY
+    assert data == 0xAA332211, f"Expected DATA_OUT=0xAA332211 after byte 2 update, got {data:#010x}"
+
+    # ------------------------------------------------------------
+    # Update byte 3 only: AA -> 44
+    # Expected: AA332211 -> 44332211
+    # ------------------------------------------------------------
+    bresp = await axi_write(dut, GPIO_DATA_OUT, 0x44000000, strobe=0b1000)
+    assert bresp == AXI_OKAY
+
+    await ClockCycles(dut.ACLK, 5)
+
+    data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+    dut._log.info(f"After byte 3 read: DATA_OUT={data:#010x}, gpio_o={int(dut.gpio_o.value):#010x}")
+
+    assert rresp == AXI_OKAY
+    assert data == 0x44332211, f"Expected DATA_OUT=0x44332211 after byte 3 update, got {data:#010x}"
+
+@cocotb.test()
+async def test_gpio_random_read_write(dut):
+    """
+    Verify DATA_OUT and DATA_DIR using multiple randomized write/read checks.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_dut(dut)
+
+    random.seed(42)
+
+    for i in range(50):
+        value = random.getrandbits(32)
+
+        bresp = await axi_write(dut, GPIO_DATA_OUT, value)
+        assert bresp == AXI_OKAY, f"Iteration {i}: DATA_OUT write response was not OKAY"
+
+        data, rresp = await axi_read(dut, GPIO_DATA_OUT)
+        assert rresp == AXI_OKAY, f"Iteration {i}: DATA_OUT read response was not OKAY"
+        assert data == value, \
+            f"Iteration {i}: DATA_OUT expected {value:#010x}, got {data:#010x}"
+
+        assert int(dut.gpio_o.value) == value, \
+            f"Iteration {i}: gpio_o expected {value:#010x}, got {int(dut.gpio_o.value):#010x}"
+
+    for i in range(50):
+        value = random.getrandbits(32)
+
+        bresp = await axi_write(dut, GPIO_DATA_DIR, value)
+        assert bresp == AXI_OKAY, f"Iteration {i}: DATA_DIR write response was not OKAY"
+
+        data, rresp = await axi_read(dut, GPIO_DATA_DIR)
+        assert rresp == AXI_OKAY, f"Iteration {i}: DATA_DIR read response was not OKAY"
+        assert data == value, \
+            f"Iteration {i}: DATA_DIR expected {value:#010x}, got {data:#010x}"
+
+        assert int(dut.gpio_oe.value) == value, \
+            f"Iteration {i}: gpio_oe expected {value:#010x}, got {int(dut.gpio_oe.value):#010x}"

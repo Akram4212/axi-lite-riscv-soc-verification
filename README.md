@@ -2,34 +2,45 @@
 
 ## Overview
 
-This project implements and verifies an AXI-Lite based RISC-V SoC using open-source EDA tools. The project focuses on RTL quality, protocol verification, and verification automation using Python and cocotb.
+This project implements and verifies an AXI-Lite based RISC-V SoC using open-source EDA tools. The project focuses on RTL quality, AXI-Lite protocol behavior, verification automation, and reusable Python/cocotb test infrastructure.
 
 ---
 
 ## Current Progress
 
 ### Completed
+
 - ✅ WSL/Linux development environment
 - ✅ Git/GitHub workflow
 - ✅ Verilator 5.038 installation
 - ✅ cocotb environment setup
+- ✅ Makefile-based lint and simulation flow
 - ✅ AXI-Lite GPIO peripheral
 - ✅ GPIO register map
 - ✅ GPIO passes Verilator lint (`-Wall`)
-- ✅ GPIO reset test passes in cocotb
-- ✅ GPIO basic AXI-Lite read/write test passes in cocotb
+- ✅ cocotb GPIO testbench
+- ✅ GPIO reset test
+- ✅ GPIO basic AXI-Lite read/write test
+- ✅ GPIO input-read test
+- ✅ GPIO set/clear register test
+- ✅ GPIO invalid-access test
+- ✅ GPIO byte-strobe test
+- ✅ GPIO randomized read/write test
+
 ### In Progress
-- 🚧 cocotb GPIO testbench
-- 🚧 Makefile automation
+
+- 🚧 AXI-Lite Timer peripheral planning
+- 🚧 Project documentation cleanup
 
 ### Planned
+
 - AXI-Lite Timer peripheral
 - AXI-Lite Interconnect
 - RAM model
 - RV32I Processor Core
 - SoC Top Module
-- Directed verification
-- Randomized verification
+- Directed verification expansion
+- Randomized verification expansion
 - Regression testing
 - Functional coverage
 - GTKWave debug
@@ -39,53 +50,12 @@ This project implements and verifies an AXI-Lite based RISC-V SoC using open-sou
 
 ## Repository Structure
 
-```
+```text
 rtl/
 include/
 tb/
 firmware/
 scripts/
 docs/
-```
-
----
-
-## Tools
-
-- SystemVerilog
-- Python
-- cocotb
-- Verilator
-- GTKWave
-- Yosys
-- Git
-- VS Code
-- WSL Ubuntu
-
----
-
-## Development Roadmap
-
-| Milestone | Status |
-|-----------|--------|
-| Development environment | ✅ Complete |
-| GPIO RTL | ✅ Complete |
-| GPIO Verilator lint | ✅ Complete |
-| GPIO cocotb testbench | 🚧 In Progress |
-| Timer peripheral | ⏳ Planned |
-| AXI-Lite interconnect | ⏳ Planned |
-| RISC-V Core | ⏳ Planned |
-| Full SoC integration | ⏳ Planned |
-| Regression suite | ⏳ Planned |
-
----
-
-## Current Verification Status
-
-| Check | Status |
-|--------|--------|
-| Verilator lint | ✅ PASS |
-| cocotb simulation | 🚧 Not Started |
-| Directed tests | ⏳ Planned |
-| Random tests | ⏳ Planned |
-| Regression | ⏳ Planned |
+Makefile
+README.md
