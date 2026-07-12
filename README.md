@@ -16,7 +16,8 @@ This project implements and verifies an AXI-Lite based RISC-V SoC using open-sou
 - ✅ AXI-Lite GPIO peripheral
 - ✅ GPIO register map
 - ✅ GPIO passes Verilator lint (`-Wall`)
-
+- ✅ GPIO reset test passes in cocotb
+- ✅ GPIO basic AXI-Lite read/write test passes in cocotb
 ### In Progress
 - 🚧 cocotb GPIO testbench
 - 🚧 Makefile automation
