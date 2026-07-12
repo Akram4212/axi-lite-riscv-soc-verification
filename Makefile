@@ -14,6 +14,7 @@
 PWD_DIR      := $(shell pwd)
 RTL_DIR      := $(PWD_DIR)/rtl
 TB_DIR       := $(PWD_DIR)/tb
+export PYTHONPATH := $(TB_DIR):$(PYTHONPATH)
 INC_DIR      := $(PWD_DIR)/include
 SCRIPT_DIR   := $(PWD_DIR)/scripts
 FIRMWARE_DIR := $(PWD_DIR)/firmware
@@ -151,7 +152,7 @@ test_gpio:
 		SIM=$(SIM) \
 		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
 		TOPLEVEL=gpio \
-		MODULE=test_gpio \
+		COCOTB_TEST_MODULES=test_gpio \
 		VERILOG_SOURCES="$(GPIO_RTL)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)"
 
