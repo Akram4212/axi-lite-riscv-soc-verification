@@ -139,7 +139,7 @@ lint_soc:
 	fi
 
 .PHONY: lint
-lint: lint_gpio
+lint: lint_gpio lint_timer
 	@echo "Implemented lint checks completed."
 
 # ============================================================
@@ -154,7 +154,8 @@ test_gpio:
 		TOPLEVEL=gpio \
 		COCOTB_TEST_MODULES=test_gpio \
 		VERILOG_SOURCES="$(GPIO_RTL)" \
-		EXTRA_ARGS="$(EXTRA_ARGS)"
+		EXTRA_ARGS="$(EXTRA_ARGS)" \
+		SIM_BUILD=sim_build/gpio
 
 .PHONY: test_timer
 test_timer:
@@ -163,9 +164,10 @@ test_timer:
 			SIM=$(SIM) \
 			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
 			TOPLEVEL=timer \
-			MODULE=test_timer \
+			COCOTB_TEST_MODULES=test_timer \
 			VERILOG_SOURCES="$(TIMER_RTL)" \
-			EXTRA_ARGS="$(EXTRA_ARGS)"; \
+			EXTRA_ARGS="$(EXTRA_ARGS)" \
+			SIM_BUILD=sim_build/timer; \
 	else \
 		echo "Timer RTL/testbench not implemented yet."; \
 	fi
@@ -177,9 +179,10 @@ test_axi:
 			SIM=$(SIM) \
 			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
 			TOPLEVEL=axi_lite_interconnect \
-			MODULE=test_axi_lite \
+			COCOTB_TEST_MODULES=test_axi_lite \
 			VERILOG_SOURCES="$(AXI_INTC_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
-			EXTRA_ARGS="$(EXTRA_ARGS)"; \
+			EXTRA_ARGS="$(EXTRA_ARGS)" \
+			SIM_BUILD=sim_build/axi; \
 	else \
 		echo "AXI interconnect RTL/testbench not implemented yet."; \
 	fi
@@ -191,9 +194,10 @@ test_soc:
 			SIM=$(SIM) \
 			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
 			TOPLEVEL=soc_top \
-			MODULE=test_soc_program \
+			COCOTB_TEST_MODULES=test_soc_program \
 			VERILOG_SOURCES="$(SOC_TOP_RTL) $(RISCV_CORE_RTL) $(AXI_INTC_RTL) $(GPIO_RTL) $(TIMER_RTL) $(RAM_RTL)" \
-			EXTRA_ARGS="$(EXTRA_ARGS)"; \
+			EXTRA_ARGS="$(EXTRA_ARGS)" \
+			SIM_BUILD=sim_build/soc; \
 	else \
 		echo "SoC RTL/testbench not implemented yet."; \
 	fi
@@ -203,13 +207,12 @@ test_soc:
 # ============================================================
 
 .PHONY: regression
-regression: clean lint_gpio test_gpio
+regression: clean lint_gpio lint_timer test_gpio test_timer
 	@echo ""
 	@echo "============================================================"
 	@echo "Regression completed."
 	@echo "Implemented tests passed."
 	@echo "============================================================"
-
 # ============================================================
 # Waveform viewing
 # ============================================================
