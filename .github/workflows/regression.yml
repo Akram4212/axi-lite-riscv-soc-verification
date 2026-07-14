@@ -1,0 +1,67 @@
+name: AXI-Lite SoC Regression
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            make \
+            python3 \
+            python3-pip \
+            python3-venv \
+            perl \
+            flex \
+            bison \
+            ccache \
+            libfl2 \
+            libfl-dev \
+            zlib1g \
+            zlib1g-dev \
+            autoconf \
+            help2man
+
+      - name: Install Verilator 5.038
+        run: |
+          git clone https://github.com/verilator/verilator.git
+          cd verilator
+          git checkout v5.038
+          autoconf
+          ./configure --prefix=$HOME/verilator-5.038
+          make -j2
+          make install
+          echo "$HOME/verilator-5.038/bin" >> $GITHUB_PATH
+
+      - name: Verify Verilator version
+        run: |
+          verilator --version
+
+      - name: Set up Python virtual environment
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install cocotb pytest
+
+      - name: Run full regression
+        run: |
+          source .venv/bin/activate
+          make clean
+          make regression
