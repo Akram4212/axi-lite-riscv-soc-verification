@@ -1,5 +1,7 @@
 # AXI-Lite RISC-V SoC Verification Platform
 
+![AXI-Lite SoC Regression](https://github.com/Akram4212/axi-lite-riscv-soc-verification/actions/workflows/regression.yml/badge.svg)
+
 ## Overview
 
 This project implements and verifies an AXI-Lite based RISC-V SoC using open-source EDA tools. The project focuses on RTL quality, AXI-Lite protocol behavior, verification automation, reusable Python/cocotb test infrastructure, and subsystem-level integration.
