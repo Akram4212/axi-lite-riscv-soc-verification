@@ -2,7 +2,8 @@
 
 module axi_lite_subsystem #(
     parameter int ADDR_WIDTH = 32,
-    parameter int DATA_WIDTH = 32
+    parameter int DATA_WIDTH = 32,
+    parameter int RAM_BYTES  = 4096
 )(
     input  logic                         ACLK,
     input  logic                         ARESETn,
@@ -53,6 +54,32 @@ module axi_lite_subsystem #(
 
     output logic                         timer_irq
 );
+
+    // ========================================================
+    // Internal AXI-Lite wires: Interconnect -> RAM
+    // ========================================================
+
+    logic [ADDR_WIDTH-1:0]         ram_awaddr;
+    logic                         ram_awvalid;
+    logic                         ram_awready;
+
+    logic [DATA_WIDTH-1:0]         ram_wdata;
+    logic [(DATA_WIDTH/8)-1:0]     ram_wstrb;
+    logic                         ram_wvalid;
+    logic                         ram_wready;
+
+    logic [1:0]                   ram_bresp;
+    logic                         ram_bvalid;
+    logic                         ram_bready;
+
+    logic [ADDR_WIDTH-1:0]         ram_araddr;
+    logic                         ram_arvalid;
+    logic                         ram_arready;
+
+    logic [DATA_WIDTH-1:0]         ram_rdata;
+    logic [1:0]                   ram_rresp;
+    logic                         ram_rvalid;
+    logic                         ram_rready;
 
     // ========================================================
     // Internal AXI-Lite wires: Interconnect -> GPIO
@@ -140,6 +167,29 @@ module axi_lite_subsystem #(
         .S_AXI_RVALID  (S_AXI_RVALID),
         .S_AXI_RREADY  (S_AXI_RREADY),
 
+        // RAM master-side AXI-Lite interface
+        .M_RAM_AWADDR  (ram_awaddr),
+        .M_RAM_AWVALID (ram_awvalid),
+        .M_RAM_AWREADY (ram_awready),
+
+        .M_RAM_WDATA   (ram_wdata),
+        .M_RAM_WSTRB   (ram_wstrb),
+        .M_RAM_WVALID  (ram_wvalid),
+        .M_RAM_WREADY  (ram_wready),
+
+        .M_RAM_BRESP   (ram_bresp),
+        .M_RAM_BVALID  (ram_bvalid),
+        .M_RAM_BREADY  (ram_bready),
+
+        .M_RAM_ARADDR  (ram_araddr),
+        .M_RAM_ARVALID (ram_arvalid),
+        .M_RAM_ARREADY (ram_arready),
+
+        .M_RAM_RDATA   (ram_rdata),
+        .M_RAM_RRESP   (ram_rresp),
+        .M_RAM_RVALID  (ram_rvalid),
+        .M_RAM_RREADY  (ram_rready),
+
         // GPIO master-side AXI-Lite interface
         .M_GPIO_AWADDR  (gpio_awaddr),
         .M_GPIO_AWVALID (gpio_awvalid),
@@ -185,6 +235,41 @@ module axi_lite_subsystem #(
         .M_TIMER_RRESP   (timer_rresp),
         .M_TIMER_RVALID  (timer_rvalid),
         .M_TIMER_RREADY  (timer_rready)
+    );
+
+    // ========================================================
+    // AXI-Lite RAM
+    // ========================================================
+
+    axi_lite_ram #(
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .DATA_WIDTH(DATA_WIDTH),
+        .RAM_BYTES (RAM_BYTES)
+    ) u_axi_lite_ram (
+        .ACLK       (ACLK),
+        .ARESETn    (ARESETn),
+
+        .S_AXI_AWADDR  (ram_awaddr),
+        .S_AXI_AWVALID (ram_awvalid),
+        .S_AXI_AWREADY (ram_awready),
+
+        .S_AXI_WDATA   (ram_wdata),
+        .S_AXI_WSTRB   (ram_wstrb),
+        .S_AXI_WVALID  (ram_wvalid),
+        .S_AXI_WREADY  (ram_wready),
+
+        .S_AXI_BRESP   (ram_bresp),
+        .S_AXI_BVALID  (ram_bvalid),
+        .S_AXI_BREADY  (ram_bready),
+
+        .S_AXI_ARADDR  (ram_araddr),
+        .S_AXI_ARVALID (ram_arvalid),
+        .S_AXI_ARREADY (ram_arready),
+
+        .S_AXI_RDATA   (ram_rdata),
+        .S_AXI_RRESP   (ram_rresp),
+        .S_AXI_RVALID  (ram_rvalid),
+        .S_AXI_RREADY  (ram_rready)
     );
 
     // ========================================================

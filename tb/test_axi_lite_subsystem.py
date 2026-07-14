@@ -19,8 +19,17 @@ AXI_SLVERR = 2
 # Subsystem Address Map
 # ============================================================
 
+RAM_BASE   = 0x0000_0000
 GPIO_BASE  = 0x1000_0000
 TIMER_BASE = 0x1000_1000
+
+RAM_BYTES = 4096
+WORD_BYTES = 4
+RAM_WORDS = RAM_BYTES // WORD_BYTES
+
+RAM_FIRST_WORD = RAM_BASE + 0x000
+RAM_LAST_WORD  = RAM_BASE + RAM_BYTES - WORD_BYTES
+
 
 # GPIO local register offsets
 GPIO_DATA_OUT     = GPIO_BASE + 0x00
@@ -411,3 +420,312 @@ async def test_subsystem_randomized_gpio_timer_access(dut):
         assert timer_read == timer_value, (
             f"Random iter {i}: expected TIMER_COMPARE={timer_value:#010x}, got {timer_read:#010x}"
         )
+
+@cocotb.test()
+async def test_subsystem_ram_access(dut):
+    """
+    Verify RAM can be accessed through the subsystem address map.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    addr = RAM_BASE + 0x10
+    value = 0xAABBCCDD
+
+    bresp = await axi_write(dut, addr, value)
+    assert bresp == AXI_OKAY, f"Expected OKAY RAM write response, got {bresp}"
+
+    data, resp = await axi_read(dut, addr)
+    assert resp == AXI_OKAY, f"Expected OKAY RAM read response, got {resp}"
+    assert data == value, f"Expected RAM data={value:#010x}, got {data:#010x}"
+
+
+@cocotb.test()
+async def test_subsystem_ram_multiple_locations(dut):
+    """
+    Verify multiple RAM addresses work correctly through the subsystem.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    test_values = {
+        RAM_BASE + 0x00: 0x11111111,
+        RAM_BASE + 0x04: 0x22222222,
+        RAM_BASE + 0x08: 0x33333333,
+        RAM_BASE + 0x0C: 0x44444444,
+        RAM_BASE + 0x20: 0x55555555,
+        RAM_LAST_WORD:  0xDEADBEEF,
+    }
+
+    for addr, value in test_values.items():
+        bresp = await axi_write(dut, addr, value)
+        assert bresp == AXI_OKAY, (
+            f"Expected OKAY RAM write at addr {addr:#010x}, got {bresp}"
+        )
+
+    for addr, expected in test_values.items():
+        data, resp = await axi_read(dut, addr)
+        assert resp == AXI_OKAY, (
+            f"Expected OKAY RAM read at addr {addr:#010x}, got {resp}"
+        )
+        assert data == expected, (
+            f"At RAM addr {addr:#010x}, expected {expected:#010x}, got {data:#010x}"
+        )
+
+
+@cocotb.test()
+async def test_subsystem_ram_byte_strobe(dut):
+    """
+    Verify RAM WSTRB byte writes work through the subsystem.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    addr = RAM_BASE + 0x40
+
+    bresp = await axi_write(dut, addr, 0xAABBCCDD)
+    assert bresp == AXI_OKAY
+
+    data, resp = await axi_read(dut, addr)
+    assert resp == AXI_OKAY
+    assert data == 0xAABBCCDD, f"Expected 0xAABBCCDD, got {data:#010x}"
+
+    bresp = await axi_write(dut, addr, 0x00000011, strobe=0b0001)
+    assert bresp == AXI_OKAY
+
+    data, resp = await axi_read(dut, addr)
+    assert resp == AXI_OKAY
+    assert data == 0xAABBCC11, f"Expected 0xAABBCC11, got {data:#010x}"
+
+    bresp = await axi_write(dut, addr, 0x00002200, strobe=0b0010)
+    assert bresp == AXI_OKAY
+
+    data, resp = await axi_read(dut, addr)
+    assert resp == AXI_OKAY
+    assert data == 0xAABB2211, f"Expected 0xAABB2211, got {data:#010x}"
+
+    bresp = await axi_write(dut, addr, 0x00330000, strobe=0b0100)
+    assert bresp == AXI_OKAY
+
+    data, resp = await axi_read(dut, addr)
+    assert resp == AXI_OKAY
+    assert data == 0xAA332211, f"Expected 0xAA332211, got {data:#010x}"
+
+    bresp = await axi_write(dut, addr, 0x44000000, strobe=0b1000)
+    assert bresp == AXI_OKAY
+
+    data, resp = await axi_read(dut, addr)
+    assert resp == AXI_OKAY
+    assert data == 0x44332211, f"Expected 0x44332211, got {data:#010x}"
+
+
+@cocotb.test()
+async def test_subsystem_ram_boundary_access(dut):
+    """
+    Verify first and last valid RAM words work through the subsystem.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    bresp = await axi_write(dut, RAM_FIRST_WORD, 0x12345678)
+    assert bresp == AXI_OKAY
+
+    bresp = await axi_write(dut, RAM_LAST_WORD, 0xCAFEBABE)
+    assert bresp == AXI_OKAY
+
+    data, resp = await axi_read(dut, RAM_FIRST_WORD)
+    assert resp == AXI_OKAY
+    assert data == 0x12345678, f"Expected first RAM word 0x12345678, got {data:#010x}"
+
+    data, resp = await axi_read(dut, RAM_LAST_WORD)
+    assert resp == AXI_OKAY
+    assert data == 0xCAFEBABE, f"Expected last RAM word 0xCAFEBABE, got {data:#010x}"
+
+
+@cocotb.test()
+async def test_subsystem_ram_unaligned_access(dut):
+    """
+    Verify unaligned RAM accesses return SLVERR through the subsystem.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    unaligned_addr = RAM_BASE + 0x02
+
+    bresp = await axi_write(dut, unaligned_addr, 0x12345678)
+    assert bresp == AXI_SLVERR, (
+        f"Expected SLVERR for unaligned RAM write, got {bresp}"
+    )
+
+    data, resp = await axi_read(dut, unaligned_addr)
+    assert resp == AXI_SLVERR, (
+        f"Expected SLVERR for unaligned RAM read, got {resp}"
+    )
+    assert data == 0, f"Expected invalid RAM read data=0, got {data:#010x}"
+
+
+@cocotb.test()
+async def test_subsystem_ram_out_of_range_access(dut):
+    """
+    Verify address just outside RAM region returns SLVERR.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    out_of_range_addr = RAM_BASE + RAM_BYTES
+
+    bresp = await axi_write(dut, out_of_range_addr, 0xDEADBEEF)
+    assert bresp == AXI_SLVERR, (
+        f"Expected SLVERR for out-of-range RAM write, got {bresp}"
+    )
+
+    data, resp = await axi_read(dut, out_of_range_addr)
+    assert resp == AXI_SLVERR, (
+        f"Expected SLVERR for out-of-range RAM read, got {resp}"
+    )
+    assert data == 0, f"Expected invalid RAM read data=0, got {data:#010x}"
+
+
+@cocotb.test()
+async def test_subsystem_ram_gpio_timer_isolation(dut):
+    """
+    Verify RAM, GPIO, and Timer accesses do not corrupt each other.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    ram_addr = RAM_BASE + 0x100
+
+    bresp = await axi_write(dut, ram_addr, 0xA5A5A5A5)
+    assert bresp == AXI_OKAY
+
+    bresp = await axi_write(dut, GPIO_DATA_OUT, 0xDEADBEEF)
+    assert bresp == AXI_OKAY
+
+    bresp = await axi_write(dut, TIMER_COMPARE, 0x0000002A)
+    assert bresp == AXI_OKAY
+
+    ram_data, resp = await axi_read(dut, ram_addr)
+    assert resp == AXI_OKAY
+    assert ram_data == 0xA5A5A5A5, (
+        f"Expected RAM=0xA5A5A5A5, got {ram_data:#010x}"
+    )
+
+    gpio_data, resp = await axi_read(dut, GPIO_DATA_OUT)
+    assert resp == AXI_OKAY
+    assert gpio_data == 0xDEADBEEF, (
+        f"Expected GPIO=0xDEADBEEF, got {gpio_data:#010x}"
+    )
+
+    timer_data, resp = await axi_read(dut, TIMER_COMPARE)
+    assert resp == AXI_OKAY
+    assert timer_data == 0x0000002A, (
+        f"Expected TIMER_COMPARE=0x2A, got {timer_data:#010x}"
+    )
+
+
+@cocotb.test()
+async def test_subsystem_randomized_ram_access(dut):
+    """
+    Verify randomized RAM accesses through the subsystem.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    random.seed(2026)
+
+    expected = {}
+
+    for _ in range(100):
+        word_index = random.randint(0, RAM_WORDS - 1)
+        addr = RAM_BASE + (word_index * WORD_BYTES)
+        value = random.getrandbits(32)
+
+        bresp = await axi_write(dut, addr, value)
+        assert bresp == AXI_OKAY
+
+        expected[addr] = value
+
+    for addr, expected_value in expected.items():
+        data, resp = await axi_read(dut, addr)
+        assert resp == AXI_OKAY
+        assert data == expected_value, (
+            f"RAM addr={addr:#010x}, expected={expected_value:#010x}, got={data:#010x}"
+        )
+
+
+@cocotb.test()
+async def test_subsystem_randomized_ram_gpio_timer_access(dut):
+    """
+    Randomized mixed RAM, GPIO, and Timer access through the subsystem.
+    """
+
+    cocotb.start_soon(Clock(dut.ACLK, 10, unit="ns").start())
+
+    await reset_subsystem(dut)
+
+    random.seed(777)
+
+    ram_reference = {}
+
+    for i in range(50):
+        ram_word_index = random.randint(0, RAM_WORDS - 1)
+        ram_addr = RAM_BASE + (ram_word_index * WORD_BYTES)
+        ram_value = random.getrandbits(32)
+
+        gpio_value = random.getrandbits(32)
+        timer_value = random.randint(1, 1000)
+
+        bresp = await axi_write(dut, ram_addr, ram_value)
+        assert bresp == AXI_OKAY
+
+        bresp = await axi_write(dut, GPIO_DATA_OUT, gpio_value)
+        assert bresp == AXI_OKAY
+
+        bresp = await axi_write(dut, TIMER_COMPARE, timer_value)
+        assert bresp == AXI_OKAY
+
+        ram_reference[ram_addr] = ram_value
+
+        ram_data, resp = await axi_read(dut, ram_addr)
+        assert resp == AXI_OKAY
+        assert ram_data == ram_value, (
+            f"iter={i}: expected RAM={ram_value:#010x}, got {ram_data:#010x}"
+        )
+
+        gpio_data, resp = await axi_read(dut, GPIO_DATA_OUT)
+        assert resp == AXI_OKAY
+        assert gpio_data == gpio_value, (
+            f"iter={i}: expected GPIO={gpio_value:#010x}, got {gpio_data:#010x}"
+        )
+
+        timer_data, resp = await axi_read(dut, TIMER_COMPARE)
+        assert resp == AXI_OKAY
+        assert timer_data == timer_value, (
+            f"iter={i}: expected TIMER={timer_value:#010x}, got {timer_data:#010x}"
+        )
+
+    for addr, expected_value in ram_reference.items():
+        data, resp = await axi_read(dut, addr)
+        assert resp == AXI_OKAY
+        assert data == expected_value, (
+            f"Final RAM check addr={addr:#010x}: "
+            f"expected={expected_value:#010x}, got={data:#010x}"
+        )
+

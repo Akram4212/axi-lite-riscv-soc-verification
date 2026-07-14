@@ -40,6 +40,7 @@ SOC_TOP_RTL    := $(RTL_DIR)/soc_top.sv
 RAM_RTL        := $(RTL_DIR)/ram.sv
 RISCV_CORE_RTL := $(RTL_DIR)/simple_riscv_core.sv
 AXI_SUBSYSTEM_RTL := $(RTL_DIR)/axi_lite_subsystem.sv
+RAM_RTL := $(RTL_DIR)/axi_lite_ram.sv
 # ----------------------------
 # Verilator options
 # ----------------------------
@@ -146,8 +147,27 @@ lint_subsystem:
 		$(GPIO_RTL) \
 		$(TIMER_RTL)
 
+.PHONY: lint_ram
+lint_ram:
+	verilator $(VERILATOR_LINT_FLAGS) $(RAM_RTL)
+
+.PHONY: test_ram
+test_ram:
+	@if [ -f "$(RAM_RTL)" ] && [ -f "$(TB_DIR)/test_axi_lite_ram.py" ]; then \
+		$(MAKE) sim \
+			SIM=$(SIM) \
+			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+			TOPLEVEL=axi_lite_ram \
+			COCOTB_TEST_MODULES=test_axi_lite_ram \
+			VERILOG_SOURCES="$(RAM_RTL)" \
+			EXTRA_ARGS="$(EXTRA_ARGS)" \
+			SIM_BUILD=sim_build/ram; \
+	else \
+		echo "AXI-Lite RAM RTL/testbench not implemented yet."; \
+	fi
+
 .PHONY: lint
-lint: lint_gpio lint_timer
+lint: lint_gpio lint_timer lint_ram
 	@echo "Implemented lint checks completed."
 
 # ============================================================
@@ -218,19 +238,43 @@ test_subsystem:
 			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
 			TOPLEVEL=axi_lite_subsystem \
 			COCOTB_TEST_MODULES=test_axi_lite_subsystem \
-			VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
+			VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
 			EXTRA_ARGS="$(EXTRA_ARGS)" \
 			SIM_BUILD=sim_build/subsystem; \
 	else \
 		echo "AXI-Lite subsystem RTL/testbench not implemented yet."; \
 	fi
 
+.PHONY: lint_subsystem
+lint_subsystem:
+	verilator $(VERILATOR_LINT_FLAGS) \
+		$(AXI_SUBSYSTEM_RTL) \
+		$(AXI_INTC_RTL) \
+		$(RAM_RTL) \
+		$(GPIO_RTL) \
+		$(TIMER_RTL)
+
+.PHONY: test_subsystem
+test_subsystem:
+	@if [ -f "$(AXI_SUBSYSTEM_RTL)" ] && [ -f "$(TB_DIR)/test_axi_lite_subsystem.py" ]; then \
+		$(MAKE) sim \
+			SIM=$(SIM) \
+			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+			TOPLEVEL=axi_lite_subsystem \
+			COCOTB_TEST_MODULES=test_axi_lite_subsystem \
+			VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
+			EXTRA_ARGS="$(EXTRA_ARGS)" \
+			SIM_BUILD=sim_build/subsystem; \
+	else \
+		echo "AXI-Lite subsystem RTL/testbench not implemented yet."; \
+	fi
+	
 # ============================================================
 # Regression
 # ============================================================
 
 .PHONY: regression
-regression: clean lint_gpio lint_timer lint_subsystem test_gpio test_timer test_subsystem
+regression: clean lint_gpio lint_timer lint_subsystem test_gpio test_timer test_subsystem test_ram
 	@echo ""
 	@echo "============================================================"
 	@echo "Regression completed."

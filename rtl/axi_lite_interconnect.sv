@@ -42,6 +42,33 @@ module axi_lite_interconnect #(
     input  logic                         S_AXI_RREADY,
 
     // ========================================================
+    // AXI-Lite Master Interface to RAM
+    // Connect these to axi_lite_ram.sv S_AXI_* ports
+    // ========================================================
+
+    output logic [ADDR_WIDTH-1:0]         M_RAM_AWADDR,
+    output logic                         M_RAM_AWVALID,
+    input  logic                         M_RAM_AWREADY,
+
+    output logic [DATA_WIDTH-1:0]         M_RAM_WDATA,
+    output logic [(DATA_WIDTH/8)-1:0]     M_RAM_WSTRB,
+    output logic                         M_RAM_WVALID,
+    input  logic                         M_RAM_WREADY,
+
+    input  logic [1:0]                   M_RAM_BRESP,
+    input  logic                         M_RAM_BVALID,
+    output logic                         M_RAM_BREADY,
+
+    output logic [ADDR_WIDTH-1:0]         M_RAM_ARADDR,
+    output logic                         M_RAM_ARVALID,
+    input  logic                         M_RAM_ARREADY,
+
+    input  logic [DATA_WIDTH-1:0]         M_RAM_RDATA,
+    input  logic [1:0]                   M_RAM_RRESP,
+    input  logic                         M_RAM_RVALID,
+    output logic                         M_RAM_RREADY,
+
+    // ========================================================
     // AXI-Lite Master Interface to GPIO
     // Connect these to gpio.sv S_AXI_* ports
     // ========================================================
@@ -100,11 +127,12 @@ module axi_lite_interconnect #(
     // Slave Select Encoding
     // ========================================================
 
-    typedef enum logic [1:0] {
-        SEL_NONE  = 2'b00,
-        SEL_GPIO  = 2'b01,
-        SEL_TIMER = 2'b10,
-        SEL_ERROR = 2'b11
+    typedef enum logic [2:0] {
+        SEL_NONE  = 3'b000,
+        SEL_RAM   = 3'b001,
+        SEL_GPIO  = 3'b010,
+        SEL_TIMER = 3'b011,
+        SEL_ERROR = 3'b100
     } slave_sel_t;
 
     slave_sel_t write_sel;
@@ -127,7 +155,9 @@ module axi_lite_interconnect #(
         input logic [ADDR_WIDTH-1:0] addr;
 
         begin
-            if ((addr & `ADDR_MASK) == `GPIO_BASE_ADDR) begin
+            if ((addr & `ADDR_MASK) == `RAM_BASE_ADDR) begin
+                decode_addr = SEL_RAM;
+            end else if ((addr & `ADDR_MASK) == `GPIO_BASE_ADDR) begin
                 decode_addr = SEL_GPIO;
             end else if ((addr & `ADDR_MASK) == `TIMER_BASE_ADDR) begin
                 decode_addr = SEL_TIMER;
@@ -143,6 +173,10 @@ module axi_lite_interconnect #(
 
         begin
             case (sel)
+                SEL_RAM: begin
+                    local_addr = addr - `RAM_BASE_ADDR;
+                end
+
                 SEL_GPIO: begin
                     local_addr = addr - `GPIO_BASE_ADDR;
                 end
@@ -185,6 +219,23 @@ module axi_lite_interconnect #(
         S_AXI_RRESP   = `AXI_RESP_OKAY;
 
         // ----------------------------------------------------
+        // Default RAM outputs
+        // ----------------------------------------------------
+        M_RAM_AWADDR  = local_addr(S_AXI_AWADDR, SEL_RAM);
+        M_RAM_AWVALID = 1'b0;
+
+        M_RAM_WDATA   = S_AXI_WDATA;
+        M_RAM_WSTRB   = S_AXI_WSTRB;
+        M_RAM_WVALID  = 1'b0;
+
+        M_RAM_BREADY  = 1'b0;
+
+        M_RAM_ARADDR  = local_addr(S_AXI_ARADDR, SEL_RAM);
+        M_RAM_ARVALID = 1'b0;
+
+        M_RAM_RREADY  = 1'b0;
+
+        // ----------------------------------------------------
         // Default GPIO outputs
         // ----------------------------------------------------
         M_GPIO_AWADDR  = local_addr(S_AXI_AWADDR, SEL_GPIO);
@@ -222,12 +273,19 @@ module axi_lite_interconnect #(
         // Write Address/Data Routing
         //
         // Simplified AXI-Lite behavior:
-        // This interconnect accepts write address and write data together.
-        // This matches the current cocotb AXI helper and GPIO/Timer slaves.
+        // This interconnect accepts AW and W together.
         // ====================================================
 
         if (write_idle && S_AXI_AWVALID && S_AXI_WVALID) begin
             case (aw_decode)
+
+                SEL_RAM: begin
+                    S_AXI_AWREADY = M_RAM_AWREADY;
+                    S_AXI_WREADY  = M_RAM_WREADY;
+
+                    M_RAM_AWVALID = S_AXI_AWVALID;
+                    M_RAM_WVALID  = S_AXI_WVALID;
+                end
 
                 SEL_GPIO: begin
                     S_AXI_AWREADY = M_GPIO_AWREADY;
@@ -264,15 +322,21 @@ module axi_lite_interconnect #(
         end else begin
             case (write_sel)
 
+                SEL_RAM: begin
+                    S_AXI_BVALID = M_RAM_BVALID;
+                    S_AXI_BRESP  = M_RAM_BRESP;
+                    M_RAM_BREADY = S_AXI_BREADY;
+                end
+
                 SEL_GPIO: begin
-                    S_AXI_BVALID = M_GPIO_BVALID;
-                    S_AXI_BRESP  = M_GPIO_BRESP;
+                    S_AXI_BVALID  = M_GPIO_BVALID;
+                    S_AXI_BRESP   = M_GPIO_BRESP;
                     M_GPIO_BREADY = S_AXI_BREADY;
                 end
 
                 SEL_TIMER: begin
-                    S_AXI_BVALID = M_TIMER_BVALID;
-                    S_AXI_BRESP  = M_TIMER_BRESP;
+                    S_AXI_BVALID   = M_TIMER_BVALID;
+                    S_AXI_BRESP    = M_TIMER_BRESP;
                     M_TIMER_BREADY = S_AXI_BREADY;
                 end
 
@@ -290,6 +354,11 @@ module axi_lite_interconnect #(
 
         if (read_idle && S_AXI_ARVALID) begin
             case (ar_decode)
+
+                SEL_RAM: begin
+                    S_AXI_ARREADY = M_RAM_ARREADY;
+                    M_RAM_ARVALID = S_AXI_ARVALID;
+                end
 
                 SEL_GPIO: begin
                     S_AXI_ARREADY  = M_GPIO_ARREADY;
@@ -319,6 +388,13 @@ module axi_lite_interconnect #(
             S_AXI_RRESP  = `AXI_RESP_SLVERR;
         end else begin
             case (read_sel)
+
+                SEL_RAM: begin
+                    S_AXI_RVALID = M_RAM_RVALID;
+                    S_AXI_RDATA  = M_RAM_RDATA;
+                    S_AXI_RRESP  = M_RAM_RRESP;
+                    M_RAM_RREADY = S_AXI_RREADY;
+                end
 
                 SEL_GPIO: begin
                     S_AXI_RVALID  = M_GPIO_RVALID;
@@ -365,6 +441,10 @@ module axi_lite_interconnect #(
 
                 case (aw_decode)
 
+                    SEL_RAM: begin
+                        write_sel <= SEL_RAM;
+                    end
+
                     SEL_GPIO: begin
                         write_sel <= SEL_GPIO;
                     end
@@ -387,6 +467,11 @@ module axi_lite_interconnect #(
                 invalid_write_resp_valid <= 1'b0;
             end
 
+            if ((write_sel == SEL_RAM) &&
+                M_RAM_BVALID && S_AXI_BREADY) begin
+                write_sel <= SEL_NONE;
+            end
+
             if ((write_sel == SEL_GPIO) &&
                 M_GPIO_BVALID && S_AXI_BREADY) begin
                 write_sel <= SEL_NONE;
@@ -404,6 +489,10 @@ module axi_lite_interconnect #(
                 S_AXI_ARVALID && S_AXI_ARREADY) begin
 
                 case (ar_decode)
+
+                    SEL_RAM: begin
+                        read_sel <= SEL_RAM;
+                    end
 
                     SEL_GPIO: begin
                         read_sel <= SEL_GPIO;
@@ -425,6 +514,11 @@ module axi_lite_interconnect #(
             // ------------------------------------------------
             if (invalid_read_resp_valid && S_AXI_RREADY) begin
                 invalid_read_resp_valid <= 1'b0;
+            end
+
+            if ((read_sel == SEL_RAM) &&
+                M_RAM_RVALID && S_AXI_RREADY) begin
+                read_sel <= SEL_NONE;
             end
 
             if ((read_sel == SEL_GPIO) &&
