@@ -182,6 +182,7 @@ test_gpio:
 		TOPLEVEL=gpio \
 		COCOTB_TEST_MODULES=test_gpio \
 		VERILOG_SOURCES="$(GPIO_RTL)" \
+		SOURCES="$(GPIO_RTL)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/gpio
 
@@ -194,6 +195,7 @@ test_timer:
 			TOPLEVEL=timer \
 			COCOTB_TEST_MODULES=test_timer \
 			VERILOG_SOURCES="$(TIMER_RTL)" \
+			SOURCES="$(TIMER_RTL)" \
 			EXTRA_ARGS="$(EXTRA_ARGS)" \
 			SIM_BUILD=sim_build/timer; \
 	else \
@@ -268,7 +270,7 @@ test_subsystem:
 	else \
 		echo "AXI-Lite subsystem RTL/testbench not implemented yet."; \
 	fi
-	
+
 # ============================================================
 # Regression
 # ============================================================
