@@ -4,8 +4,10 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles
 
-from axi_lite_master import reset_dut, axi_write, axi_read
-
+from axi_lite_master import reset_dut
+from axi_lite_master import axi_write as raw_axi_write
+from axi_lite_master import axi_read as raw_axi_read
+from axi_lite_coverage import AxiLiteCoverage
 
 # ============================================================
 # AXI-Lite Response Codes
@@ -58,6 +60,35 @@ CTRL_IRQ_EN = 1 << 2
 
 STATUS_MATCH = 1 << 0
 
+# ============================================================
+# Functional coverage
+# ============================================================
+
+coverage = AxiLiteCoverage()
+
+
+async def axi_write(dut, addr, data, strobe=0xF):
+    """
+    Coverage-aware AXI-Lite write wrapper.
+
+    This keeps the existing test code unchanged while automatically
+    sampling every write transaction.
+    """
+    bresp = await raw_axi_write(dut, addr, data, strobe)
+    coverage.sample_write(addr, bresp, strobe)
+    return bresp
+
+
+async def axi_read(dut, addr):
+    """
+    Coverage-aware AXI-Lite read wrapper.
+
+    This keeps the existing test code unchanged while automatically
+    sampling every read transaction.
+    """
+    data, rresp = await raw_axi_read(dut, addr)
+    coverage.sample_read(addr, rresp)
+    return data, rresp
 
 # ============================================================
 # Subsystem Reset Helper
@@ -728,4 +759,75 @@ async def test_subsystem_randomized_ram_gpio_timer_access(dut):
             f"Final RAM check addr={addr:#010x}: "
             f"expected={expected_value:#010x}, got={data:#010x}"
         )
+
+@cocotb.test()
+async def test_subsystem_extra_wstrb_coverage(dut):
+    """
+    Hit additional WSTRB functional coverage bins through RAM writes.
+    Covers:
+        0000, 0011, 0101, 1010, 1100
+    """
+
+    clock = Clock(dut.ACLK, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
+    await reset_dut(dut)
+
+    def apply_strobe(old_value, new_value, strobe):
+        result = old_value
+
+        for byte in range(4):
+            if strobe & (1 << byte):
+                mask = 0xFF << (8 * byte)
+                result = (result & ~mask) | (new_value & mask)
+
+        return result & 0xFFFF_FFFF
+
+    test_addr = RAM_BASE + 0x300
+
+    expected = 0x11223344
+
+    bresp = await axi_write(dut, test_addr, expected, strobe=0xF)
+    assert bresp == AXI_OKAY
+
+    data, rresp = await axi_read(dut, test_addr)
+    assert rresp == AXI_OKAY
+    assert data == expected
+
+    patterns = [0x0, 0x3, 0x5, 0xA, 0xC]
+
+    for strobe in patterns:
+        write_data = 0xA5A5_0000 | strobe
+
+        bresp = await axi_write(dut, test_addr, write_data, strobe=strobe)
+        assert bresp == AXI_OKAY
+
+        expected = apply_strobe(expected, write_data, strobe)
+
+        data, rresp = await axi_read(dut, test_addr)
+        assert rresp == AXI_OKAY
+        assert data == expected, (
+            f"WSTRB 0x{strobe:X} failed: "
+            f"expected 0x{expected:08X}, got 0x{data:08X}"
+        )
+
+@cocotb.test()
+async def test_functional_coverage_summary(dut):
+    """
+    Print AXI-Lite functional coverage summary after subsystem tests.
+    """
+    dut._log.info("Generating AXI-Lite functional coverage report...")
+
+    coverage.report(dut._log)
+
+    missing = coverage.missing_bins()
+
+    if missing:
+        dut._log.info("Missing functional coverage bins:")
+        for group_name, bins in missing.items():
+            dut._log.info(f"{group_name}: {bins}")
+    else:
+        dut._log.info("All functional coverage bins were hit.")
+
+    coverage.assert_minimum_coverage(80.0)
 
