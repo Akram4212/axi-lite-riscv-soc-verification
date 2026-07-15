@@ -346,4 +346,39 @@ module axi_lite_subsystem #(
         .timer_irq     (timer_irq)
     );
 
+        // ========================================================
+    // AXI-Lite Protocol Assertions
+    // Monitors the external AXI-Lite interface of the subsystem
+    // ========================================================
+
+    axi_lite_assertions #(
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .DATA_WIDTH(DATA_WIDTH)
+    ) u_axi_lite_assertions (
+        .ACLK     (ACLK),
+        .ARESETn  (ARESETn),
+
+        .AWADDR   (S_AXI_AWADDR),
+        .AWVALID  (S_AXI_AWVALID),
+        .AWREADY  (S_AXI_AWREADY),
+
+        .WDATA    (S_AXI_WDATA),
+        .WSTRB    (S_AXI_WSTRB),
+        .WVALID   (S_AXI_WVALID),
+        .WREADY   (S_AXI_WREADY),
+
+        .BRESP    (S_AXI_BRESP),
+        .BVALID   (S_AXI_BVALID),
+        .BREADY   (S_AXI_BREADY),
+
+        .ARADDR   (S_AXI_ARADDR),
+        .ARVALID  (S_AXI_ARVALID),
+        .ARREADY  (S_AXI_ARREADY),
+
+        .RDATA    (S_AXI_RDATA),
+        .RRESP    (S_AXI_RRESP),
+        .RVALID   (S_AXI_RVALID),
+        .RREADY   (S_AXI_RREADY)
+    );
+    
 endmodule

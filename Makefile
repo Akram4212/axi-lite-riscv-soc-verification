@@ -36,7 +36,7 @@ TIMER_RTL         := $(RTL_DIR)/timer.sv
 RAM_RTL           := $(RTL_DIR)/axi_lite_ram.sv
 AXI_INTC_RTL      := $(RTL_DIR)/axi_lite_interconnect.sv
 AXI_SUBSYSTEM_RTL := $(RTL_DIR)/axi_lite_subsystem.sv
-
+AXI_ASSERT_RTL := $(RTL_DIR)/axi_lite_assertions.sv
 # Future files
 SOC_TOP_RTL       := $(RTL_DIR)/soc_top.sv
 RISCV_CORE_RTL    := $(RTL_DIR)/simple_riscv_core.sv
@@ -52,6 +52,7 @@ EXTRA_ARGS += -I$(INC_DIR)
 ifeq ($(SIM),verilator)
 EXTRA_ARGS += --trace
 EXTRA_ARGS += --trace-structs
+EXTRA_ARGS += --assert
 endif
 
 # ============================================================
@@ -145,7 +146,8 @@ lint_subsystem:
 		$(AXI_INTC_RTL) \
 		$(RAM_RTL) \
 		$(GPIO_RTL) \
-		$(TIMER_RTL)
+		$(TIMER_RTL) \
+		$(AXI_ASSERT_RTL)
 
 .PHONY: lint_ram
 lint_ram:
@@ -241,10 +243,11 @@ test_subsystem:
 		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
 		TOPLEVEL=axi_lite_subsystem \
 		COCOTB_TEST_MODULES=test_axi_lite_subsystem \
-		VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
-		SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
+		VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL) $(AXI_ASSERT_RTL)" \
+		SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL) $(AXI_ASSERT_RTL)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/subsystem
+
 # ============================================================
 # Regression
 # ============================================================
