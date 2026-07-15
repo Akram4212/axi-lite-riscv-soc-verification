@@ -31,16 +31,15 @@ WAVE_FILE ?= dump.vcd
 # ----------------------------
 # RTL sources
 # ----------------------------
-GPIO_RTL := $(RTL_DIR)/gpio.sv
+GPIO_RTL          := $(RTL_DIR)/gpio.sv
+TIMER_RTL         := $(RTL_DIR)/timer.sv
+RAM_RTL           := $(RTL_DIR)/axi_lite_ram.sv
+AXI_INTC_RTL      := $(RTL_DIR)/axi_lite_interconnect.sv
+AXI_SUBSYSTEM_RTL := $(RTL_DIR)/axi_lite_subsystem.sv
 
 # Future files
-TIMER_RTL      := $(RTL_DIR)/timer.sv
-AXI_INTC_RTL   := $(RTL_DIR)/axi_lite_interconnect.sv
-SOC_TOP_RTL    := $(RTL_DIR)/soc_top.sv
-RAM_RTL        := $(RTL_DIR)/ram.sv
-RISCV_CORE_RTL := $(RTL_DIR)/simple_riscv_core.sv
-AXI_SUBSYSTEM_RTL := $(RTL_DIR)/axi_lite_subsystem.sv
-RAM_RTL := $(RTL_DIR)/axi_lite_ram.sv
+SOC_TOP_RTL       := $(RTL_DIR)/soc_top.sv
+RISCV_CORE_RTL    := $(RTL_DIR)/simple_riscv_core.sv
 # ----------------------------
 # Verilator options
 # ----------------------------
@@ -144,6 +143,7 @@ lint_subsystem:
 	verilator $(VERILATOR_LINT_FLAGS) \
 		$(AXI_SUBSYSTEM_RTL) \
 		$(AXI_INTC_RTL) \
+		$(RAM_RTL) \
 		$(GPIO_RTL) \
 		$(TIMER_RTL)
 
@@ -151,20 +151,6 @@ lint_subsystem:
 lint_ram:
 	verilator $(VERILATOR_LINT_FLAGS) $(RAM_RTL)
 
-.PHONY: test_ram
-test_ram:
-	@if [ -f "$(RAM_RTL)" ] && [ -f "$(TB_DIR)/test_axi_lite_ram.py" ]; then \
-		$(MAKE) sim \
-			SIM=$(SIM) \
-			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
-			TOPLEVEL=axi_lite_ram \
-			COCOTB_TEST_MODULES=test_axi_lite_ram \
-			VERILOG_SOURCES="$(RAM_RTL)" \
-			EXTRA_ARGS="$(EXTRA_ARGS)" \
-			SIM_BUILD=sim_build/ram; \
-	else \
-		echo "AXI-Lite RAM RTL/testbench not implemented yet."; \
-	fi
 
 .PHONY: lint
 lint: lint_gpio lint_timer lint_ram
@@ -184,7 +170,7 @@ test_gpio:
 		VERILOG_SOURCES="$(GPIO_RTL)" \
 		SOURCES="$(GPIO_RTL)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
-		SIM_BUILD=sim_build/gpio
+		SIM_BUILD=sim_build/gpio 
 
 .PHONY: test_timer
 test_timer:
@@ -200,6 +186,22 @@ test_timer:
 			SIM_BUILD=sim_build/timer; \
 	else \
 		echo "Timer RTL/testbench not implemented yet."; \
+	fi
+
+.PHONY: test_ram
+test_ram:
+	@if [ -f "$(RAM_RTL)" ] && [ -f "$(TB_DIR)/test_axi_lite_ram.py" ]; then \
+		$(MAKE) sim \
+			SIM=$(SIM) \
+			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+			TOPLEVEL=axi_lite_ram \
+			COCOTB_TEST_MODULES=test_axi_lite_ram \
+			VERILOG_SOURCES="$(RAM_RTL)" \
+			SOURCES="$(RAM_RTL)" \
+			EXTRA_ARGS="$(EXTRA_ARGS)" \
+			SIM_BUILD=sim_build/ram; \
+	else \
+		echo "AXI-Lite RAM RTL/testbench not implemented yet."; \
 	fi
 
 .PHONY: test_axi
@@ -234,49 +236,21 @@ test_soc:
 
 .PHONY: test_subsystem
 test_subsystem:
-	@if [ -f "$(AXI_SUBSYSTEM_RTL)" ] && [ -f "$(TB_DIR)/test_axi_lite_subsystem.py" ]; then \
-		$(MAKE) sim \
-			SIM=$(SIM) \
-			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
-			TOPLEVEL=axi_lite_subsystem \
-			COCOTB_TEST_MODULES=test_axi_lite_subsystem \
-			VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
-			EXTRA_ARGS="$(EXTRA_ARGS)" \
-			SIM_BUILD=sim_build/subsystem; \
-	else \
-		echo "AXI-Lite subsystem RTL/testbench not implemented yet."; \
-	fi
-
-.PHONY: lint_subsystem
-lint_subsystem:
-	verilator $(VERILATOR_LINT_FLAGS) \
-		$(AXI_SUBSYSTEM_RTL) \
-		$(AXI_INTC_RTL) \
-		$(RAM_RTL) \
-		$(GPIO_RTL) \
-		$(TIMER_RTL)
-
-.PHONY: test_subsystem
-test_subsystem:
-	@if [ -f "$(AXI_SUBSYSTEM_RTL)" ] && [ -f "$(TB_DIR)/test_axi_lite_subsystem.py" ]; then \
-		$(MAKE) sim \
-			SIM=$(SIM) \
-			TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
-			TOPLEVEL=axi_lite_subsystem \
-			COCOTB_TEST_MODULES=test_axi_lite_subsystem \
-			VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
-			EXTRA_ARGS="$(EXTRA_ARGS)" \
-			SIM_BUILD=sim_build/subsystem; \
-	else \
-		echo "AXI-Lite subsystem RTL/testbench not implemented yet."; \
-	fi
-
+	$(MAKE) sim \
+		SIM=$(SIM) \
+		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+		TOPLEVEL=axi_lite_subsystem \
+		COCOTB_TEST_MODULES=test_axi_lite_subsystem \
+		VERILOG_SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
+		SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL)" \
+		EXTRA_ARGS="$(EXTRA_ARGS)" \
+		SIM_BUILD=sim_build/subsystem
 # ============================================================
 # Regression
 # ============================================================
 
 .PHONY: regression
-regression: clean lint_gpio lint_timer lint_subsystem test_gpio test_timer test_subsystem test_ram
+regression: clean lint_gpio lint_timer lint_ram lint_subsystem test_gpio test_timer test_ram test_subsystem
 	@echo ""
 	@echo "============================================================"
 	@echo "Regression completed."
@@ -328,7 +302,9 @@ clean::
 	rm -f *.wdb
 
 # ============================================================
-# Include cocotb simulator Makefile
+# Include cocotb simulator Makefile for cocotb sim/results targets
 # ============================================================
 
+ifneq ($(filter sim results.xml,$(MAKECMDGOALS)),)
 include $(shell cocotb-config --makefiles)/Makefile.sim
+endif
