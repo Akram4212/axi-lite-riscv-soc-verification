@@ -45,7 +45,9 @@ package cpu_types_pkg;
     LUI       = 7'b0110111,
     AUIPC     = 7'b0010111,
     LR_SC     = 7'b0101111,
-    HALT      = 7'b1111111
+    EBREAK    = 7'b1111111,
+    OPCODE_MISC_MEM = 7'b0001111;  // FENCE
+    OPCODE_SYSTEM   = 7'b1110011;  // ECALL, EBREAK
   } opcode_t;
 
   typedef enum logic[4:0] {

@@ -31,6 +31,7 @@ WAVE_FILE ?= dump.vcd
 # ----------------------------
 # RTL sources
 # ----------------------------
+RV32I_PKG_RTL := $(RTL_DIR)/rv32i_pkg.sv
 GPIO_RTL          := $(RTL_DIR)/gpio.sv
 TIMER_RTL         := $(RTL_DIR)/timer.sv
 RAM_RTL           := $(RTL_DIR)/axi_lite_ram.sv
