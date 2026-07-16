@@ -768,7 +768,7 @@ async def test_subsystem_extra_wstrb_coverage(dut):
         0000, 0011, 0101, 1010, 1100
     """
 
-    clock = Clock(dut.ACLK, 10, units="ns")
+    clock = Clock(dut.ACLK, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     await reset_dut(dut)
