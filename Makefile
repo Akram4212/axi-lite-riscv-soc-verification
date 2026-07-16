@@ -51,10 +51,12 @@ RV32I_ALU_RTL     := $(RTL_DIR)/rv32i_alu.sv
 RV32I_REGFILE_RTL := $(RTL_DIR)/rv32i_regfile.sv
 RV32I_DECODER_RTL := $(RTL_DIR)/rv32i_decoder.sv
 RV32I_CORE_RTL    := $(RTL_DIR)/simple_riscv_core.sv
+RV32I_ALU_WRAPPER     := $(TB_DIR)/rv32i_alu_wrapper.sv
 
 RV32I_ALU_SOURCES := \
 	$(RV32I_PKG_RTL) \
-	$(RV32I_ALU_RTL)
+	$(RV32I_ALU_RTL) \
+	$(RV32I_ALU_WRAPPER)
 
 RV32I_REGFILE_SOURCES := \
 	$(RV32I_PKG_RTL) \
@@ -82,10 +84,17 @@ SOC_SOURCES := \
 	$(TIMER_RTL) \
 	$(AXI_ASSERT_RTL)
 
+
+
 # ----------------------------
 # Verilator options
 # ----------------------------
 VERILATOR_LINT_FLAGS := --lint-only -Wall -I$(INC_DIR)
+
+RV32I_UNIT_LINT_FLAGS := \
+	$(VERILATOR_LINT_FLAGS) \
+	-Wno-UNDRIVEN \
+	-Wno-UNUSEDPARAM
 
 # Cocotb / Verilator compile options
 EXTRA_ARGS += -Wall
@@ -95,6 +104,10 @@ ifeq ($(SIM),verilator)
 EXTRA_ARGS += --trace
 EXTRA_ARGS += --trace-structs
 EXTRA_ARGS += --assert
+
+# The shared RV32I package contains parameters that are not used
+# by every individual unit-level simulation.
+EXTRA_ARGS += -Wno-UNUSEDPARAM
 endif
 
 # ============================================================
@@ -218,25 +231,22 @@ lint: lint_gpio lint_timer lint_ram lint_subsystem
 	@echo "Implemented lint checks completed."
 
 
+
 # ============================================================
 # RV32I lint targets
 # ============================================================
 
 .PHONY: lint_rv32i_alu
 lint_rv32i_alu:
-	@test -f "$(RV32I_PKG_RTL)" || (echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
-	@test -f "$(RV32I_ALU_RTL)" || (echo "ERROR: Missing $(RV32I_ALU_RTL)" && exit 1)
-	verilator $(VERILATOR_LINT_FLAGS) \
-		--top-module rv32i_alu \
+	@test -f "$(RV32I_PKG_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
+	@test -f "$(RV32I_ALU_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_ALU_RTL)" && exit 1)
+	@test -f "$(RV32I_ALU_WRAPPER)" || \
+		(echo "ERROR: Missing $(RV32I_ALU_WRAPPER)" && exit 1)
+	verilator $(RV32I_UNIT_LINT_FLAGS) \
+		--top-module rv32i_alu_wrapper \
 		$(RV32I_ALU_SOURCES)
-
-.PHONY: lint_rv32i_regfile
-lint_rv32i_regfile:
-	@test -f "$(RV32I_PKG_RTL)" || (echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
-	@test -f "$(RV32I_REGFILE_RTL)" || (echo "ERROR: Missing $(RV32I_REGFILE_RTL)" && exit 1)
-	verilator $(VERILATOR_LINT_FLAGS) \
-		--top-module rv32i_regfile \
-		$(RV32I_REGFILE_SOURCES)
 
 .PHONY: lint_rv32i_decoder
 lint_rv32i_decoder:
@@ -337,20 +347,28 @@ test_subsystem:
 
 .PHONY: test_rv32i_alu
 test_rv32i_alu:
-	@test -f "$(RV32I_ALU_RTL)" || (echo "ERROR: Missing $(RV32I_ALU_RTL)" && exit 1)
-	@test -f "$(TB_DIR)/test_rv32i_alu.py" || (echo "ERROR: Missing $(TB_DIR)/test_rv32i_alu.py" && exit 1)
+	@test -f "$(RV32I_PKG_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
+	@test -f "$(RV32I_ALU_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_ALU_RTL)" && exit 1)
+	@test -f "$(RV32I_ALU_WRAPPER)" || \
+		(echo "ERROR: Missing $(RV32I_ALU_WRAPPER)" && exit 1)
+	@test -f "$(TB_DIR)/test_rv32i_alu.py" || \
+		(echo "ERROR: Missing $(TB_DIR)/test_rv32i_alu.py" && exit 1)
 	$(MAKE) sim \
 		SIM=$(SIM) \
 		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
-		TOPLEVEL=rv32i_alu \
+		TOPLEVEL=rv32i_alu_wrapper \
 		COCOTB_TEST_MODULES=test_rv32i_alu \
 		VERILOG_SOURCES="$(RV32I_ALU_SOURCES)" \
 		SOURCES="$(RV32I_ALU_SOURCES)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/rv32i_alu
-
+		
 .PHONY: test_rv32i_regfile
 test_rv32i_regfile:
+	@test -f "$(RV32I_PKG_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
 	@test -f "$(RV32I_REGFILE_RTL)" || (echo "ERROR: Missing $(RV32I_REGFILE_RTL)" && exit 1)
 	@test -f "$(TB_DIR)/test_rv32i_regfile.py" || (echo "ERROR: Missing $(TB_DIR)/test_rv32i_regfile.py" && exit 1)
 	$(MAKE) sim \
