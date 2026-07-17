@@ -52,15 +52,18 @@ RV32I_REGFILE_RTL := $(RTL_DIR)/rv32i_regfile.sv
 RV32I_DECODER_RTL := $(RTL_DIR)/rv32i_decoder.sv
 RV32I_CORE_RTL    := $(RTL_DIR)/simple_riscv_core.sv
 RV32I_ALU_WRAPPER     := $(TB_DIR)/rv32i_alu_wrapper.sv
+RV32I_REGFILE_WRAPPER := $(TB_DIR)/rv32i_regfile_wrapper.sv
+
+RV32I_REGFILE_SOURCES := \
+	$(RV32I_PKG_RTL) \
+	$(RV32I_REGFILE_RTL) \
+	$(RV32I_REGFILE_WRAPPER)
 
 RV32I_ALU_SOURCES := \
 	$(RV32I_PKG_RTL) \
 	$(RV32I_ALU_RTL) \
 	$(RV32I_ALU_WRAPPER)
 
-RV32I_REGFILE_SOURCES := \
-	$(RV32I_PKG_RTL) \
-	$(RV32I_REGFILE_RTL)
 
 RV32I_DECODER_SOURCES := \
 	$(RV32I_PKG_RTL) \
@@ -248,6 +251,18 @@ lint_rv32i_alu:
 		--top-module rv32i_alu_wrapper \
 		$(RV32I_ALU_SOURCES)
 
+.PHONY: lint_rv32i_regfile
+lint_rv32i_regfile:
+	@test -f "$(RV32I_PKG_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
+	@test -f "$(RV32I_REGFILE_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_REGFILE_RTL)" && exit 1)
+	@test -f "$(RV32I_REGFILE_WRAPPER)" || \
+		(echo "ERROR: Missing $(RV32I_REGFILE_WRAPPER)" && exit 1)
+	verilator $(RV32I_UNIT_LINT_FLAGS) \
+		--top-module rv32i_regfile_wrapper \
+		$(RV32I_REGFILE_SOURCES)
+
 .PHONY: lint_rv32i_decoder
 lint_rv32i_decoder:
 	@test -f "$(RV32I_PKG_RTL)" || (echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
@@ -369,18 +384,22 @@ test_rv32i_alu:
 test_rv32i_regfile:
 	@test -f "$(RV32I_PKG_RTL)" || \
 		(echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
-	@test -f "$(RV32I_REGFILE_RTL)" || (echo "ERROR: Missing $(RV32I_REGFILE_RTL)" && exit 1)
-	@test -f "$(TB_DIR)/test_rv32i_regfile.py" || (echo "ERROR: Missing $(TB_DIR)/test_rv32i_regfile.py" && exit 1)
+	@test -f "$(RV32I_REGFILE_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_REGFILE_RTL)" && exit 1)
+	@test -f "$(RV32I_REGFILE_WRAPPER)" || \
+		(echo "ERROR: Missing $(RV32I_REGFILE_WRAPPER)" && exit 1)
+	@test -f "$(TB_DIR)/test_rv32i_regfile.py" || \
+		(echo "ERROR: Missing $(TB_DIR)/test_rv32i_regfile.py" && exit 1)
 	$(MAKE) sim \
 		SIM=$(SIM) \
 		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
-		TOPLEVEL=rv32i_regfile \
+		TOPLEVEL=rv32i_regfile_wrapper \
 		COCOTB_TEST_MODULES=test_rv32i_regfile \
 		VERILOG_SOURCES="$(RV32I_REGFILE_SOURCES)" \
 		SOURCES="$(RV32I_REGFILE_SOURCES)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/rv32i_regfile
-
+		
 .PHONY: test_rv32i_decoder
 test_rv32i_decoder:
 	@test -f "$(RV32I_DECODER_RTL)" || (echo "ERROR: Missing $(RV32I_DECODER_RTL)" && exit 1)
