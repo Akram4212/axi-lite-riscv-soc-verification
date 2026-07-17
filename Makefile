@@ -53,6 +53,7 @@ RV32I_DECODER_RTL := $(RTL_DIR)/rv32i_decoder.sv
 RV32I_CORE_RTL    := $(RTL_DIR)/simple_riscv_core.sv
 RV32I_ALU_WRAPPER     := $(TB_DIR)/rv32i_alu_wrapper.sv
 RV32I_REGFILE_WRAPPER := $(TB_DIR)/rv32i_regfile_wrapper.sv
+RV32I_DECODER_WRAPPER := $(TB_DIR)/rv32i_decoder_wrapper.sv
 
 RV32I_REGFILE_SOURCES := \
 	$(RV32I_PKG_RTL) \
@@ -64,10 +65,10 @@ RV32I_ALU_SOURCES := \
 	$(RV32I_ALU_RTL) \
 	$(RV32I_ALU_WRAPPER)
 
-
 RV32I_DECODER_SOURCES := \
 	$(RV32I_PKG_RTL) \
-	$(RV32I_DECODER_RTL)
+	$(RV32I_DECODER_RTL) \
+	$(RV32I_DECODER_WRAPPER)
 
 RV32I_CORE_SOURCES := \
 	$(RV32I_PKG_RTL) \
@@ -265,10 +266,15 @@ lint_rv32i_regfile:
 
 .PHONY: lint_rv32i_decoder
 lint_rv32i_decoder:
-	@test -f "$(RV32I_PKG_RTL)" || (echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
-	@test -f "$(RV32I_DECODER_RTL)" || (echo "ERROR: Missing $(RV32I_DECODER_RTL)" && exit 1)
-	verilator $(VERILATOR_LINT_FLAGS) \
-		--top-module rv32i_decoder \
+	@test -f "$(RV32I_PKG_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
+	@test -f "$(RV32I_DECODER_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_DECODER_RTL)" && exit 1)
+	@test -f "$(RV32I_DECODER_WRAPPER)" || \
+		(echo "ERROR: Missing $(RV32I_DECODER_WRAPPER)" && exit 1)
+	verilator $(RV32I_UNIT_LINT_FLAGS) \
+		-Wno-UNUSEDSIGNAL \
+		--top-module rv32i_decoder_wrapper \
 		$(RV32I_DECODER_SOURCES)
 
 .PHONY: lint_rv32i_core
@@ -399,21 +405,27 @@ test_rv32i_regfile:
 		SOURCES="$(RV32I_REGFILE_SOURCES)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/rv32i_regfile
-		
+
 .PHONY: test_rv32i_decoder
 test_rv32i_decoder:
-	@test -f "$(RV32I_DECODER_RTL)" || (echo "ERROR: Missing $(RV32I_DECODER_RTL)" && exit 1)
-	@test -f "$(TB_DIR)/test_rv32i_decoder.py" || (echo "ERROR: Missing $(TB_DIR)/test_rv32i_decoder.py" && exit 1)
+	@test -f "$(RV32I_PKG_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_PKG_RTL)" && exit 1)
+	@test -f "$(RV32I_DECODER_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_DECODER_RTL)" && exit 1)
+	@test -f "$(RV32I_DECODER_WRAPPER)" || \
+		(echo "ERROR: Missing $(RV32I_DECODER_WRAPPER)" && exit 1)
+	@test -f "$(TB_DIR)/test_rv32i_decoder.py" || \
+		(echo "ERROR: Missing $(TB_DIR)/test_rv32i_decoder.py" && exit 1)
 	$(MAKE) sim \
 		SIM=$(SIM) \
 		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
-		TOPLEVEL=rv32i_decoder \
+		TOPLEVEL=rv32i_decoder_wrapper \
 		COCOTB_TEST_MODULES=test_rv32i_decoder \
 		VERILOG_SOURCES="$(RV32I_DECODER_SOURCES)" \
 		SOURCES="$(RV32I_DECODER_SOURCES)" \
-		EXTRA_ARGS="$(EXTRA_ARGS)" \
+		EXTRA_ARGS="$(EXTRA_ARGS) -Wno-UNUSEDSIGNAL" \
 		SIM_BUILD=sim_build/rv32i_decoder
-
+		
 .PHONY: test_rv32i_core
 test_rv32i_core:
 	@for file in $(RV32I_CORE_SOURCES); do \

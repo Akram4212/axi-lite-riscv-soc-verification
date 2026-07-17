@@ -54,6 +54,15 @@ package rv32i_pkg;
     SC = 5'h03
   } funct5_atomic_t;
   
+  typedef enum logic [2:0] {
+    IMM_I    = 3'b000,
+    IMM_S    = 3'b001,
+    IMM_B    = 3'b010,
+    IMM_U    = 3'b011,
+    IMM_J    = 3'b100,
+    IMM_NONE = 3'b111
+} imm_type_t;
+
   // r/itype funct3 op type
   typedef enum logic [FUNC3_W-1:0] {
     SLL     = 3'h1,
