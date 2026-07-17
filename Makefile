@@ -423,9 +423,9 @@ test_rv32i_decoder:
 		COCOTB_TEST_MODULES=test_rv32i_decoder \
 		VERILOG_SOURCES="$(RV32I_DECODER_SOURCES)" \
 		SOURCES="$(RV32I_DECODER_SOURCES)" \
-		EXTRA_ARGS="$(EXTRA_ARGS) -Wno-UNUSEDSIGNAL" \
+		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/rv32i_decoder
-		
+
 .PHONY: test_rv32i_core
 test_rv32i_core:
 	@for file in $(RV32I_CORE_SOURCES); do \
