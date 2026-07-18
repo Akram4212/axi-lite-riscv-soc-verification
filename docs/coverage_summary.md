@@ -1,245 +1,58 @@
-# AXI-Lite RISC-V SoC Architecture
+# Coverage Summary
 
 ## Overview
 
-The project currently contains two independently verified subsystems:
+The project uses two complementary coverage methods:
 
-1. A five-stage RV32I processor core with instruction and data memory handshakes.
-2. An AXI-Lite subsystem containing RAM, GPIO, Timer, interconnect logic, and protocol assertions.
+1. Python functional coverage for AXI-Lite transactions and peripheral behavior.
+2. Verilator RTL line and branch coverage for the RV32I processor hierarchy.
 
-The processor-to-AXI-Lite adapter and final `soc_top.sv` integration remain planned work.
+## RV32I Core Regression
 
-## Current Verified RV32I Core
+All end-to-end processor tests pass.
 
-```text
-+----------------------------------------------------------+
-|                  Cocotb Core Testbench                   |
-|                                                          |
-|  +----------------------+  +---------------------------+ |
-|  | Instruction Memory   |  | Data Memory Model         | |
-|  +----------+-----------+  +-------------+-------------+ |
-+-------------|-----------------------------|---------------+
-              | imem request/response       | dmem request/response
-              v                             v
-+----------------------------------------------------------+
-|                     Five-Stage RV32I Core                |
-|                                                          |
-|   IF  --->  ID  --->  EX  --->  MEM  --->  WB           |
-|                                                          |
-|   PC       Decoder    ALU      Load/Store   Writeback     |
-|            Regfile    Forward  Branch/Jump                |
-|                       Hazard                              |
-+----------------------------------------------------------+
-```
+| Metric | Result |
+|---|---:|
+| Core tests | 13/13 PASS |
+| Overall line coverage | 92.0% — 923/1003 |
+| Overall branch coverage | 82.9% — 1940/2339 |
+| RTL line coverage | 91.2% — 665/729 |
+| RTL branch coverage | 96.8% — 448/463 |
+| `rv32i_core.sv` line coverage | 93.5% — 174/186 |
+| `rv32i_core.sv` branch coverage | 99.4% — 335/337 |
 
-## Current Verified AXI-Lite Subsystem
+The overall result includes RTL, SystemVerilog interfaces, and the cocotb
+wrapper. The RTL-only result includes processor source files under `rtl/`.
 
-```text
-                    +----------------------+
-                    | Cocotb AXI-Lite      |
-                    | Master Driver        |
-                    +----------+-----------+
-                               |
-                               | AXI-Lite
-                               v
-                    +----------+-----------+
-                    | AXI-Lite Interconnect|
-                    +----+----------+------+
-                         |          |
-              +----------+          +----------------+
-              |                                      |
-      +-------v------+  +------------v---+  +--------v-------+
-      | AXI-Lite RAM |  | AXI-Lite GPIO |  | AXI-Lite Timer |
-      | 4 KiB        |  | Peripheral     |  | Peripheral     |
-      +--------------+  +----------------+  +----------------+
-```
+![RV32I core coverage report](images/core_coverage.png)
 
-## Planned Full SoC
+## Decoder Coverage
+
+| Metric | Result |
+|---|---:|
+| Overall line coverage | 98.2% — 332/338 |
+| Overall branch coverage | 100.0% — 220/220 |
+| Decoder RTL line coverage | 98.4% — 254/258 |
+| Decoder RTL branch coverage | 100.0% — 20/20 |
+
+The decoder suite covers:
+
+- All supported RV32I instruction forms
+- Invalid R-type `funct7` values
+- Invalid shift-immediate `funct7` values
+- Invalid load, store, branch, JALR, and FENCE encodings
+- Unsupported CSR instructions
+- Unknown opcodes
+- Illegal-instruction side-effect suppression
+
+The four remaining uncovered decoder line entries do not represent uncovered
+decision paths because decoder branch coverage is 100%.
+
+![RV32I decoder coverage report](images/decoder_coverage.png)
+
+## AXI-Lite Functional Coverage
+
+The current AXI-Lite subsystem functional coverage is:
 
 ```text
-+----------------+
-| Five-Stage     |
-| RV32I Core     |
-+-------+--------+
-        |
-        | Instruction and data memory requests
-        v
-+-------+----------------+
-| RV32I AXI-Lite Master |
-| Adapter               |
-+-------+----------------+
-        |
-        | AXI-Lite
-        v
-+-------+----------------+
-| AXI-Lite Interconnect |
-+----+-----------+------+
-     |           |
-+----v-----+ +---v------+ +------v------+
-| AXI RAM | | AXI GPIO | | AXI Timer   |
-+----------+ +----------+ +-------------+
-```
-
-## RV32I Pipeline
-
-The processor uses a five-stage, single-issue, in-order pipeline:
-
-1. **IF — Instruction Fetch**
-   - Holds the program counter.
-   - Requests the next instruction.
-   - Supports instruction-memory backpressure.
-
-2. **ID — Instruction Decode**
-   - Extracts opcode and instruction fields.
-   - Generates immediates and control signals.
-   - Reads the register file.
-   - Detects load-use hazards.
-   - Applies WB-to-ID same-cycle bypassing.
-
-3. **EX — Execute**
-   - Selects forwarded operands.
-   - Performs ALU operations.
-   - Computes load/store addresses.
-   - Computes JALR targets.
-
-4. **MEM — Memory and Control-Flow Resolution**
-   - Issues data-memory requests.
-   - Formats stores and byte strobes.
-   - Extends load results.
-   - Resolves conditional branches, JAL, and JALR.
-
-5. **WB — Writeback**
-   - Selects ALU, load, or PC+4 data.
-   - Writes the destination register.
-   - Commits EBREAK halt after older instructions retire.
-
-## Pipeline Registers
-
-```text
-IF/ID  -> instruction and instruction PC
-ID/EX  -> decoded controls, operands, immediate, register selectors
-EX/MEM -> ALU result, store data, branch controls, memory controls
-MEM/WB -> final memory/ALU result and writeback controls
-```
-
-Each latch supports the controls required for its stage, including reset, pipeline advancement, bubble insertion, and redirect flushing where applicable.
-
-## Data Hazard Handling
-
-### MEM-to-EX Forwarding
-
-A result in MEM may be forwarded directly to an instruction in EX when:
-
-- The MEM instruction writes a nonzero destination register.
-- The destination matches an EX source register.
-- The MEM result is available without waiting for a load response.
-
-### WB-to-EX Forwarding
-
-A result in WB may be forwarded to EX when the destination register matches an EX source and no newer MEM result has priority.
-
-### WB-to-ID Bypass
-
-The register file write and ID/EX capture occur on the same active clock edge. A decode-stage bypass supplies the WB value directly to ID so that the ID/EX latch does not capture a stale register value.
-
-### Load-Use Stall
-
-When a load is in EX and the following instruction consumes the load destination:
-
-- The PC and IF/ID register are frozen.
-- A bubble is inserted into ID/EX.
-- The load advances toward MEM/WB.
-
-## Control Hazards
-
-Branches and jumps are resolved in MEM.
-
-A taken branch, JAL, or JALR:
-
-- Selects the redirect target.
-- Flushes younger instructions.
-- Updates the PC.
-- Preserves older instructions so they can retire.
-
-JALR clears target address bit zero as required by RV32I.
-
-Resolving control flow in MEM simplifies the datapath but creates a larger taken-branch penalty than an earlier-stage implementation.
-
-## Memory Interface
-
-The core exposes separate instruction and data interfaces.
-
-### Instruction Interface
-
-```text
-imemREN
-imemaddr
-ihit
-imemload
-```
-
-### Data Interface
-
-```text
-dmemREN
-dmemWEN
-dmemaddr
-dmemstore
-dmem_wstrb
-dhit
-dmemload
-```
-
-A memory operation advances only when its required response is available. This supports instruction- and data-memory backpressure in verification.
-
-## Loads and Stores
-
-### Supported Loads
-
-- `LB`
-- `LH`
-- `LW`
-- `LBU`
-- `LHU`
-
-The MEM stage selects the requested byte or halfword and applies signed or unsigned extension.
-
-### Supported Stores
-
-- `SB`
-- `SH`
-- `SW`
-
-The MEM stage shifts store data and generates four-bit write strobes.
-
-## Illegal Instructions
-
-Unsupported or malformed instructions set `illegal` and are forced to be side-effect free:
-
-- No register write
-- No data-memory read or write
-- No branch or jump redirect
-- No branch-condition controls
-- No FENCE, ECALL, EBREAK, or halt side effects
-
-The core records that an illegal instruction was observed and stops it through the controlled halt path after older instructions can retire.
-
-## AXI-Lite Subsystem
-
-The AXI-Lite interconnect decodes the address and routes transactions to RAM, GPIO, or Timer. Invalid and unaligned accesses are verified to return appropriate error responses.
-
-The final SoC will use an adapter between the processor's Harvard-style request interfaces and the shared AXI-Lite subsystem.
-
-## Known Architectural Limitations
-
-- No CSR implementation
-- No privileged ISA
-- No trap handler
-- No interrupts
-- No RV32M multiplication or division
-- No RV32A atomics
-- No cache implementation in the current core
-- No branch prediction
-- Branches and jumps are resolved in MEM
-- AXI-Lite processor adapter is not integrated yet
-- Firmware-driven full-SoC verification is not implemented yet
+96%
