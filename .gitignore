@@ -34,3 +34,9 @@ coverage_*_annotated/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated Verilator and LCOV coverage output
+coverage.dat
+coverage*.info
+coverage*_html/
+coverage*_annotated/
