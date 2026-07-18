@@ -1,28 +1,36 @@
-# Project Documentation
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
 
-This directory contains the design and verification documentation for the current AXI-Lite subsystem milestone.
+# Simulator output
+sim_build/
+obj_dir/
+results.xml
+dump.vcd
+dump.fst
+dump.lxt
+*.vcd
+*.fst
+*.lxt
+*.log
+*.xml
+transcript
+*.jou
+*.wdb
 
-## Documents
+# Verilator / LCOV coverage output
+coverage.dat
+coverage.info
+coverage_*.info
+coverage_html/
+coverage_*_html/
+coverage_annotated/
+coverage_*_annotated/
 
-| Document | Purpose |
-|---|---|
-| [Address Map](address_map.md) | Global memory map, register definitions, reset values, and access behavior |
-| [Architecture](architecture.md) | RTL hierarchy, transaction routing, interfaces, reset behavior, and current limitations |
-| [Verification Plan](verification_plan.md) | Verification objectives, feature matrices, assertions, coverage goals, regression, and exit criteria |
-| [Coverage Summary](coverage_summary.md) | Current functional-coverage result, hit bins, exclusions, and interpretation |
-
-## Current Milestone
-
-The implemented subsystem contains:
-
-- A 4 KiB AXI-Lite RAM
-- An AXI-Lite GPIO peripheral
-- An AXI-Lite timer peripheral
-- A one-master, three-target AXI-Lite interconnect
-- External-interface AXI-Lite protocol assertions
-- Directed and randomized cocotb verification
-- Functional coverage
-- Verilator lint and simulation
-- GitHub Actions regression
-
-The RV32I processor core and firmware-driven full-SoC verification are planned next-stage work.
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

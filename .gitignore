@@ -1,26 +1,36 @@
-# Simulation outputs
-sim_build/
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Simulator output
+sim_build/
+obj_dir/
+results.xml
+dump.vcd
+dump.fst
+dump.lxt
 *.vcd
 *.fst
 *.lxt
 *.log
 *.xml
-results.xml
+transcript
+*.jou
+*.wdb
 
-# Verilator
-obj_dir/
-*.d
+# Verilator / LCOV coverage output
+coverage.dat
+coverage.info
+coverage_*.info
+coverage_html/
+coverage_*_html/
+coverage_annotated/
+coverage_*_annotated/
 
-# Python
-*.pyc
-.pytest_cache/
-
-# VS Code
+# Editor and OS files
 .vscode/
-
-# OS files
+.idea/
 .DS_Store
-Thumbs.dbverilator/
-verilator-src/
-.venv/
+Thumbs.db
