@@ -8,68 +8,46 @@ module rv32i_decoder (
 
     // Immgen helper functions
 
-function automatic word_t generate_i_immediate(
-    input word_t instr_word
+function automatic word_t sign_extend_12 (
+    input logic [11:0] imm12
 );
-    generate_i_immediate = {
-        {20{instr_word[31]}},
-        instr_word[31:20]
+    sign_extend_12 = {
+        {20{imm12[11]}},
+        imm12
+    };
+endfunction
+
+function automatic word_t sign_extend_13 (
+    input logic [12:0] imm13
+);
+    sign_extend_13 = {
+        {19{imm13[12]}},
+        imm13
     };
 endfunction
 
 
-function automatic word_t generate_s_immediate(
-    input word_t instr_word
-);
-    generate_s_immediate = {
-        {20{instr_word[31]}},
-        instr_word[31:25],
-        instr_word[11:7]
-    };
-endfunction
-
-
-function automatic word_t generate_b_immediate(
-    input word_t instr_word
-);
-    generate_b_immediate = {
-        {19{instr_word[31]}},
-        instr_word[31],
-        instr_word[7],
-        instr_word[30:25],
-        instr_word[11:8],
-        1'b0
-    };
-endfunction
-
-
-function automatic word_t generate_u_immediate(
-    input word_t instr_word
+function automatic word_t generate_u_immediate (
+    input logic [19:0] imm20
 );
     generate_u_immediate = {
-        instr_word[31:12],
+        imm20,
         12'b0
     };
 endfunction
 
-
-function automatic word_t generate_j_immediate(
-    input word_t instr_word
+function automatic word_t sign_extend_21 (
+    input logic [20:0] imm21
 );
-    generate_j_immediate = {
-        {11{instr_word[31]}},
-        instr_word[31],
-        instr_word[19:12],
-        instr_word[20],
-        instr_word[30:21],
-        1'b0
+    sign_extend_21 = {
+        {11{imm21[20]}},
+        imm21
     };
 endfunction
 
-
     // instruction decoder
 
-    always_comb begin : INSTRUCTION_DECODER
+    always_comb begin
         // Common instruction-field extraction
         decif.opcode = decif.instruction[6:0];
         decif.wsel   = decif.instruction[11:7];
@@ -111,8 +89,6 @@ endfunction
         // Opcode decoding
 
         case (decif.opcode)
-
-            // Reg-reg instructions
             RTYPE: begin
                 decif.WEN = 1'b1;
                 case (decif.funct3)
@@ -198,9 +174,10 @@ endfunction
                 decif.WEN       = 1'b1;
                 decif.AluSrcB   = 1'b1;
                 decif.rsel2     = '0;
-                decif.immediate = generate_i_immediate(
-                    decif.instruction
-                );
+                decif.immediate =
+                            sign_extend_12(
+                                decif.instruction[31:20]
+                            );
                 case (decif.funct3)
                     3'b000:
                         decif.aluop = ALU_ADD;  // ADDI
@@ -252,9 +229,7 @@ endfunction
                 decif.MemtoReg  = 1'b1;
                 decif.dmemREN   = 1'b1;
                 decif.aluop     = ALU_ADD;
-                decif.immediate = generate_i_immediate(
-                    decif.instruction
-                );
+                decif.immediate = sign_extend_12(decif.instruction[31:20]);
                 case (decif.funct3)
                     3'b000, // LB
                     3'b001, // LH
@@ -272,9 +247,10 @@ endfunction
                 decif.AluSrcB   = 1'b1;
                 decif.dmemWEN   = 1'b1;
                 decif.aluop     = ALU_ADD;
-                decif.immediate = generate_s_immediate(
-                    decif.instruction
-                );
+                decif.immediate = sign_extend_12({
+                    decif.instruction[31:25],
+                    decif.instruction[11:7]
+                });
                 case (decif.funct3)
                     3'b000, // SB
                     3'b001, // SH
@@ -287,9 +263,13 @@ endfunction
             // Conditional branches
             BTYPE: begin
                 decif.wsel      = '0;
-                decif.immediate = generate_b_immediate(
-                    decif.instruction
-                );
+                decif.immediate = sign_extend_13({
+                    decif.instruction[31],
+                    decif.instruction[7],
+                    decif.instruction[30:25],
+                    decif.instruction[11:8],
+                    1'b0
+                });
                 case (decif.funct3)
                     3'b000: begin // BEQ
                         decif.aluop      = ALU_SUB;
@@ -327,9 +307,13 @@ endfunction
                 decif.WEN       = 1'b1;
                 decif.PCtoReg   = 1'b1;
                 decif.PCsrc     = 1'b1;
-                decif.immediate = generate_j_immediate(
-                    decif.instruction
-                );
+                decif.immediate = sign_extend_21({
+                    decif.instruction[31],
+                    decif.instruction[19:12],
+                    decif.instruction[20],
+                    decif.instruction[30:21],
+                    1'b0
+                });
             end
             // JALR
             JALR: begin
@@ -339,8 +323,8 @@ endfunction
                 decif.PCtoReg   = 1'b1;
                 decif.PCj       = 1'b1;
                 decif.aluop     = ALU_ADD;
-                decif.immediate = generate_i_immediate(
-                    decif.instruction
+                decif.immediate = sign_extend_12(
+                    decif.instruction[31:20]
                 );
                 if (decif.funct3 != 3'b000) begin
                     decif.illegal = 1'b1;
@@ -354,7 +338,7 @@ endfunction
                 decif.AluSrcB   = 1'b1;
                 decif.aluop     = ALU_ADD;
                 decif.immediate = generate_u_immediate(
-                    decif.instruction
+                    decif.instruction[31:12]
                 );
             end
             // AUIPC
@@ -366,7 +350,7 @@ endfunction
                 decif.AluSrcB   = 1'b1;
                 decif.aluop     = ALU_ADD;
                 decif.immediate = generate_u_immediate(
-                    decif.instruction
+                    decif.instruction[31:12]
                 );
             end
             // FENCE
@@ -424,5 +408,7 @@ endfunction
             decif.ebreak = 1'b0;
             decif.halt   = 1'b0;
         end
+
     end
+
 endmodule

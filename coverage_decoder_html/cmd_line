@@ -1,0 +1,1 @@
+genhtml --branch-coverage coverage_decoder.info --output-directory coverage_decoder_html
