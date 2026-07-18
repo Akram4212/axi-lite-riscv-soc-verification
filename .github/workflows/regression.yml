@@ -1,18 +1,24 @@
-name: AXI-Lite SoC Regression
+name: AXI-Lite RV32I SoC Regression
 
 on:
   push:
     branches:
       - main
       - dev
+
   pull_request:
     branches:
       - main
       - dev
 
+concurrency:
+  group: regression-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   regression:
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
 
     steps:
       - name: Checkout repository
@@ -21,7 +27,9 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
+            build-essential \
             git \
             make \
             python3 \
@@ -40,28 +48,44 @@ jobs:
 
       - name: Install Verilator 5.038
         run: |
-          git clone https://github.com/verilator/verilator.git
+          git clone \
+            --branch v5.038 \
+            --depth 1 \
+            https://github.com/verilator/verilator.git
+
           cd verilator
-          git checkout v5.038
+
           autoconf
-          ./configure --prefix=$HOME/verilator-5.038
+          ./configure --prefix="$HOME/verilator-5.038"
+
           make -j2
           make install
-          echo "$HOME/verilator-5.038/bin" >> $GITHUB_PATH
 
-      - name: Verify Verilator version
-        run: |
-          verilator --version
+          echo "$HOME/verilator-5.038/bin" >> "$GITHUB_PATH"
 
       - name: Set up Python virtual environment
         run: |
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install --upgrade pip
-          pip install cocotb pytest
 
-      - name: Run full regression
+          python -m pip install --upgrade pip
+          python -m pip install \
+            cocotb==2.0.1 \
+            pytest
+
+      - name: Verify tool versions
         run: |
           source .venv/bin/activate
+
+          verilator --version
+          python3 --version
+          cocotb-config --version
+          make --version
+
+      - name: Run complete regression
+        run: |
+          source .venv/bin/activate
+
           make clean
-          make regression
+          make regression_all
+          
