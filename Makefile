@@ -64,6 +64,13 @@ FORWARDING_UNIT_RTL   := $(RTL_DIR)/forwarding_unit.sv
 HAZARD_UNIT_RTL       := $(RTL_DIR)/hazard_unit.sv
 RV32I_CORE_RTL        := $(RTL_DIR)/rv32i_core.sv
 
+# ============================================================
+# RV32I AXI-Lite master adapter
+# ============================================================
+
+RV32I_AXI_MASTER_RTL := $(RTL_DIR)/rv32i_axi_lite_master.sv
+
+RV32I_AXI_MASTER_WRAPPER := $(TB_DIR)/rv32i_axi_lite_master_wrapper.sv
 # Temporary direct-memory verification path.
 # These modules stay outside rv32i_core and are not part of SOC_SOURCES.
 CORE_MEMORY_CTRL_RTL  := $(RTL_DIR)/memory_control.sv
@@ -142,6 +149,10 @@ SOC_SOURCES := \
 	$(TIMER_RTL) \
 	$(AXI_ASSERT_RTL)
 
+RV32I_AXI_MASTER_SOURCES := \
+	$(RTL_DIR)/rv32i_pkg.sv \
+	$(RV32I_AXI_MASTER_RTL) \
+	$(RV32I_AXI_MASTER_WRAPPER)
 
 # ----------------------------
 # Verilator options
@@ -363,6 +374,15 @@ lint_rv32i_memory:
 		--top-module ram \
 		$(CORE_RAM_RTL)
 
+.PHONY: lint_rv32i_axi_master
+lint_rv32i_axi_master:
+	verilator $(VERILATOR_LINT_FLAGS) \
+		-Wno-UNDRIVEN \
+		-Wno-UNUSEDPARAM \
+		-Wno-UNUSEDSIGNAL \
+		--top-module rv32i_axi_lite_master_wrapper \
+		$(RV32I_AXI_MASTER_SOURCES)
+
 # ============================================================
 # Cocotb simulation targets
 # ============================================================
@@ -437,6 +457,24 @@ test_subsystem:
 		SOURCES="$(AXI_SUBSYSTEM_RTL) $(AXI_INTC_RTL) $(RAM_RTL) $(GPIO_RTL) $(TIMER_RTL) $(AXI_ASSERT_RTL)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/subsystem
+
+.PHONY: test_rv32i_axi_master
+test_rv32i_axi_master:
+	@test -f "$(RV32I_AXI_MASTER_RTL)" || \
+		(echo "ERROR: Missing $(RV32I_AXI_MASTER_RTL)" && exit 1)
+	@test -f "$(RV32I_AXI_MASTER_WRAPPER)" || \
+		(echo "ERROR: Missing $(RV32I_AXI_MASTER_WRAPPER)" && exit 1)
+	@test -f "$(TB_DIR)/test_rv32i_axi_lite_master.py" || \
+		(echo "ERROR: Missing adapter cocotb test" && exit 1)
+	$(MAKE) sim \
+		SIM=$(SIM) \
+		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+		TOPLEVEL=rv32i_axi_lite_master_wrapper \
+		COCOTB_TEST_MODULES=test_rv32i_axi_lite_master \
+		VERILOG_SOURCES="$(RV32I_AXI_MASTER_SOURCES)" \
+		SOURCES="$(RV32I_AXI_MASTER_SOURCES)" \
+		EXTRA_ARGS="$(EXTRA_ARGS)" \
+		SIM_BUILD=sim_build/rv32i_axi_master
 
 
 # ============================================================
@@ -572,16 +610,19 @@ regression_rv32i:
 	$(MAKE) lint_rv32i_decoder
 	$(MAKE) lint_rv32i_core
 	$(MAKE) lint_rv32i_memory
+	$(MAKE) lint_rv32i_axi_master
 	$(MAKE) test_rv32i_alu
 	$(MAKE) test_rv32i_regfile
 	$(MAKE) test_rv32i_decoder
 	$(MAKE) test_rv32i_core
+	$(MAKE) test_rv32i_axi_master
 	@echo ""
 	@echo "============================================================"
 	@echo "RV32I regression completed successfully."
-	@echo "ALU, register file, decoder, pipeline, and core checks passed."
+	@echo "ALU, register file, decoder, pipeline, memory, core,"
+	@echo "and AXI-Lite master adapter checks passed."
 	@echo "============================================================"
-
+	
 .PHONY: regression_all
 regression_all:
 	$(MAKE) regression
