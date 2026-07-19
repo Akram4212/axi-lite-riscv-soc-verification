@@ -4,8 +4,9 @@
 #
 # Current milestone:
 #   - AXI-Lite RAM/GPIO/Timer subsystem
-#   - Verified RV32I ALU, register file, and integrated decoder
-#   - Five-stage pipelined RV32I core integration
+#   - Verified five-stage RV32I processor core
+#   - Verified RV32I-to-AXI-Lite master adapter
+#   - Full processor/AXI-Lite SoC integration
 #   - cocotb + Verilator verification
 # ============================================================
 
@@ -40,7 +41,7 @@ AXI_INTC_RTL      := $(RTL_DIR)/axi_lite_interconnect.sv
 AXI_SUBSYSTEM_RTL := $(RTL_DIR)/axi_lite_subsystem.sv
 AXI_ASSERT_RTL    := $(RTL_DIR)/axi_lite_assertions.sv
 
-# Future full-SoC files
+# Full-SoC integration files
 SOC_TOP_RTL          := $(RTL_DIR)/soc_top.sv
 RV32I_AXI_MASTER_RTL := $(RTL_DIR)/rv32i_axi_lite_master.sv
 
@@ -68,13 +69,14 @@ RV32I_CORE_RTL        := $(RTL_DIR)/rv32i_core.sv
 # RV32I AXI-Lite master adapter
 # ============================================================
 
-RV32I_AXI_MASTER_RTL := $(RTL_DIR)/rv32i_axi_lite_master.sv
 
 RV32I_AXI_MASTER_WRAPPER := $(TB_DIR)/rv32i_axi_lite_master_wrapper.sv
 # Temporary direct-memory verification path.
 # These modules stay outside rv32i_core and are not part of SOC_SOURCES.
 CORE_MEMORY_CTRL_RTL  := $(RTL_DIR)/memory_control.sv
 CORE_RAM_RTL          := $(RTL_DIR)/ram.sv
+
+
 
 # ----------------------------
 # Cocotb/Verilator wrappers
@@ -122,7 +124,7 @@ CORE_MEMORY_SOURCES := \
 	$(CORE_MEMORY_CTRL_RTL) \
 	$(CORE_RAM_RTL)
 
-# The SoC uses the pipelined core plus the future AXI-Lite master.
+# The SoC uses the pipelined core and verified AXI-Lite master adapter.
 # The cocotb core wrapper and temporary direct-memory modules are excluded.
 RV32I_CORE_SOC_SOURCES := \
 	$(RV32I_PKG_RTL) \
@@ -138,16 +140,21 @@ RV32I_CORE_SOC_SOURCES := \
 	$(MEM_WB_LATCH_RTL) \
 	$(RV32I_CORE_RTL)
 
-SOC_SOURCES := \
+SOC_TOP_WRAPPER := $(TB_DIR)/soc_top_wrapper.sv
+
+# Source order: package/core, adapter, AXI-Lite blocks,
+# subsystem, SoC top, and cocotb-facing wrapper.
+SOC_TOP_SOURCES := \
 	$(RV32I_CORE_SOC_SOURCES) \
 	$(RV32I_AXI_MASTER_RTL) \
-	$(SOC_TOP_RTL) \
-	$(AXI_SUBSYSTEM_RTL) \
-	$(AXI_INTC_RTL) \
+	$(AXI_ASSERT_RTL) \
 	$(RAM_RTL) \
 	$(GPIO_RTL) \
 	$(TIMER_RTL) \
-	$(AXI_ASSERT_RTL)
+	$(AXI_INTC_RTL) \
+	$(AXI_SUBSYSTEM_RTL) \
+	$(SOC_TOP_RTL) \
+	$(SOC_TOP_WRAPPER)
 
 RV32I_AXI_MASTER_SOURCES := \
 	$(RTL_DIR)/rv32i_pkg.sv \
@@ -222,7 +229,9 @@ help:
 	@echo "  make test_rv32i_decoder    Run RV32I decoder tests"
 	@echo "  make test_rv32i_core       Run pipelined RV32I core tests"
 	@echo "  make regression_rv32i      Run RV32I unit/core regression"
-	@echo "  make regression_all        Run AXI-Lite and RV32I regressions"
+	@echo "  make lint_soc              Lint integrated RV32I AXI-Lite SoC"
+	@echo "  make test_soc              Run firmware-driven SoC smoke test"
+	@echo "  make regression_all        Run AXI-Lite, RV32I, and SoC regressions"
 	@echo ""
 	@echo "RV32I waveforms:"
 	@echo "  make wave_rv32i_alu        Run ALU tests and open GTKWave"
@@ -237,7 +246,7 @@ help:
 	@echo "  make synth_gpio            Run GPIO synthesis check"
 	@echo "  make clean                 Remove generated files"
 	@echo ""
-		@echo "  make coverage_rv32i_core   Run core tests with RTL coverage"
+	@echo "  make coverage_rv32i_core   Run core tests with RTL coverage"
 
 # ============================================================
 # Status / tool checks
@@ -282,15 +291,6 @@ lint_axi:
 	else \
 		echo "axi_lite_interconnect.sv not implemented yet."; \
 	fi
-
-.PHONY: lint_soc
-lint_soc:
-	@for file in $(SOC_SOURCES); do \
-		test -f "$$file" || (echo "ERROR: Missing $$file" && exit 1); \
-	done
-	verilator $(VERILATOR_LINT_FLAGS) \
-		--top-module soc_top \
-		$(SOC_SOURCES)
 
 .PHONY: lint_subsystem
 lint_subsystem:
@@ -382,6 +382,20 @@ lint_rv32i_axi_master:
 		-Wno-UNUSEDSIGNAL \
 		--top-module rv32i_axi_lite_master_wrapper \
 		$(RV32I_AXI_MASTER_SOURCES)
+
+.PHONY: lint_soc
+lint_soc:
+	@for file in $(SOC_TOP_SOURCES); do \
+		test -f "$$file" || (echo "ERROR: Missing $$file" && exit 1); \
+	done
+	verilator $(VERILATOR_LINT_FLAGS) \
+		-Wno-UNDRIVEN \
+		-Wno-UNUSEDPARAM \
+		-Wno-UNUSEDSIGNAL \
+		-Wno-TIMESCALEMOD \
+		-Wno-SYNCASYNCNET \
+		--top-module soc_top_wrapper \
+		$(SOC_TOP_SOURCES)
 
 # ============================================================
 # Cocotb simulation targets
@@ -476,7 +490,28 @@ test_rv32i_axi_master:
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/rv32i_axi_master
 
-
+.PHONY: test_soc
+test_soc:
+	@for file in $(SOC_TOP_SOURCES); do \
+		test -f "$$file" || \
+		(echo "ERROR: Missing $$file" && exit 1); \
+	done
+	@test -f "$(TB_DIR)/test_soc_top.py" || \
+		(echo "ERROR: Missing $(TB_DIR)/test_soc_top.py" && exit 1)
+	$(MAKE) sim \
+		SIM=$(SIM) \
+		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+		TOPLEVEL=soc_top_wrapper \
+		COCOTB_TEST_MODULES=test_soc_top \
+		VERILOG_SOURCES="$(SOC_TOP_SOURCES)" \
+		SOURCES="$(SOC_TOP_SOURCES)" \
+		EXTRA_ARGS="$(EXTRA_ARGS) \
+			-Wno-SYNCASYNCNET \
+			-Wno-TIMESCALEMOD \
+			-Wno-UNUSEDSIGNAL \
+			-Wno-UNDRIVEN" \
+		SIM_BUILD=sim_build/soc_top
+		
 # ============================================================
 # RV32I cocotb simulation targets
 # ============================================================
@@ -500,7 +535,7 @@ test_rv32i_alu:
 		SOURCES="$(RV32I_ALU_SOURCES)" \
 		EXTRA_ARGS="$(EXTRA_ARGS)" \
 		SIM_BUILD=sim_build/rv32i_alu
-		
+
 .PHONY: test_rv32i_regfile
 test_rv32i_regfile:
 	@test -f "$(RV32I_PKG_RTL)" || \
@@ -568,22 +603,6 @@ coverage_rv32i_core:
 	@echo "Verilator coverage generated successfully:"
 	@ls -lh coverage.dat
 
-.PHONY: test_soc
-test_soc:
-	@for file in $(SOC_SOURCES); do \
-		test -f "$$file" || (echo "ERROR: Missing $$file" && exit 1); \
-	done
-	@test -f "$(TB_DIR)/test_soc_program.py" || (echo "ERROR: Missing $(TB_DIR)/test_soc_program.py" && exit 1)
-	$(MAKE) sim \
-		SIM=$(SIM) \
-		TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
-		TOPLEVEL=soc_top \
-		COCOTB_TEST_MODULES=test_soc_program \
-		VERILOG_SOURCES="$(SOC_SOURCES)" \
-		SOURCES="$(SOC_SOURCES)" \
-		EXTRA_ARGS="$(EXTRA_ARGS)" \
-		SIM_BUILD=sim_build/soc
-
 # ============================================================
 # Regression
 # ============================================================
@@ -622,14 +641,16 @@ regression_rv32i:
 	@echo "ALU, register file, decoder, pipeline, memory, core,"
 	@echo "and AXI-Lite master adapter checks passed."
 	@echo "============================================================"
-	
+
 .PHONY: regression_all
 regression_all:
 	$(MAKE) regression
 	$(MAKE) regression_rv32i
+	$(MAKE) lint_soc
+	$(MAKE) test_soc
 	@echo ""
 	@echo "============================================================"
-	@echo "Complete AXI-Lite and RV32I regression passed."
+	@echo "Complete AXI-Lite, RV32I, and full-SoC regression passed."
 	@echo "============================================================"
 
 # ============================================================
