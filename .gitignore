@@ -1,42 +1,43 @@
+
+# Editor and OS files
+# Generated RISC-V firmware artifacts
+# Generated Verilator and LCOV coverage output
 # Python
-__pycache__/
+# Simulator output
+# Verilator / LCOV coverage output
+*.fst
+*.jou
+*.log
+*.lxt
 *.py[cod]
+*.vcd
+*.wdb
+*.xml
+.DS_Store
+.idea/
 .pytest_cache/
 .venv/
-
-# Simulator output
-sim_build/
-obj_dir/
-results.xml
-dump.vcd
-dump.fst
-dump.lxt
-*.vcd
-*.fst
-*.lxt
-*.log
-*.xml
-transcript
-*.jou
-*.wdb
-
-# Verilator / LCOV coverage output
+.vscode/
+Thumbs.db
+__pycache__/
+coverage*.info
+coverage*_annotated/
+coverage*_html/
 coverage.dat
 coverage.info
 coverage_*.info
-coverage_html/
+coverage_*_annotated/
 coverage_*_html/
 coverage_annotated/
-coverage_*_annotated/
-
-# Editor and OS files
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Generated Verilator and LCOV coverage output
-coverage.dat
-coverage*.info
-coverage*_html/
-coverage*_annotated/
+coverage_html/
+dump.fst
+dump.lxt
+dump.vcd
+firmware/*.bin
+firmware/*.elf
+firmware/*.hex
+firmware/*.map
+obj_dir/
+results.xml
+sim_build/
+transcript

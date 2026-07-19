@@ -3,7 +3,8 @@
 module axi_lite_subsystem #(
     parameter int ADDR_WIDTH = 32,
     parameter int DATA_WIDTH = 32,
-    parameter int RAM_BYTES  = 4096
+    parameter int RAM_BYTES  = 4096,
+    parameter string RAM_INIT_FILE = ""
 )(
     input  logic                         ACLK,
     input  logic                         ARESETn,
@@ -242,9 +243,10 @@ module axi_lite_subsystem #(
     // ========================================================
 
     axi_lite_ram #(
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .DATA_WIDTH(DATA_WIDTH),
-        .RAM_BYTES (RAM_BYTES)
+    .ADDR_WIDTH(ADDR_WIDTH),
+    .DATA_WIDTH(DATA_WIDTH),
+    .RAM_BYTES (RAM_BYTES),
+    .INIT_FILE (RAM_INIT_FILE)
     ) u_axi_lite_ram (
         .ACLK       (ACLK),
         .ARESETn    (ARESETn),

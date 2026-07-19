@@ -44,7 +44,9 @@ jobs:
             zlib1g \
             zlib1g-dev \
             autoconf \
-            help2man
+            help2man \
+            gcc-riscv64-unknown-elf \
+            binutils-riscv64-unknown-elf
 
       - name: Install Verilator 5.038
         run: |
@@ -81,6 +83,8 @@ jobs:
           python3 --version
           cocotb-config --version
           make --version
+          riscv64-unknown-elf-gcc --version
+          riscv64-unknown-elf-objcopy --version
 
       - name: Run complete regression
         run: |

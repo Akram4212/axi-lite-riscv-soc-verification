@@ -3,7 +3,8 @@
 
 module soc_top #(
     parameter logic [31:0] PC_INIT = 32'h0000_0000,
-    parameter int unsigned RAM_BYTES = 4096
+    parameter int unsigned RAM_BYTES = 4096,
+    parameter string RAM_INIT_FILE = ""
 ) (
     input logic CLK,
     input logic nRST,
@@ -68,7 +69,8 @@ module soc_top #(
     axi_lite_subsystem #(
         .ADDR_WIDTH(32),
         .DATA_WIDTH(32),
-        .RAM_BYTES (RAM_BYTES)
+        .RAM_BYTES (RAM_BYTES),
+        .RAM_INIT_FILE (RAM_INIT_FILE)
     ) u_subsystem (
         .ACLK   (CLK),
         .ARESETn(nRST),
