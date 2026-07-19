@@ -3,7 +3,8 @@
 module axi_lite_ram #(
     parameter int ADDR_WIDTH = 32,
     parameter int DATA_WIDTH = 32,
-    parameter int RAM_BYTES  = 4096
+    parameter int RAM_BYTES  = 4096,
+    parameter string INIT_FILE = ""
 )(
     input  logic                         ACLK,
     input  logic                         ARESETn,
@@ -64,7 +65,27 @@ module axi_lite_ram #(
     // ========================================================
 
     logic [DATA_WIDTH-1:0] mem [0:WORDS-1];
+    integer init_index;
 
+    initial begin
+        // Give RAM deterministic contents when no firmware file is used.
+        for (
+            init_index = 0;
+            init_index < WORDS;
+            init_index = init_index + 1
+        ) begin
+            mem[init_index] = '0;
+        end
+
+        if (INIT_FILE != "") begin
+            $display(
+                "Loading AXI-Lite RAM image from %s",
+                INIT_FILE
+            );
+
+            $readmemh(INIT_FILE, mem);
+        end
+    end
     // ========================================================
     // AXI-Lite Handshake Helpers
     // ========================================================

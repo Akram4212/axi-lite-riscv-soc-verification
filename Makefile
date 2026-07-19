@@ -194,6 +194,57 @@ ifeq ($(HDL_COVERAGE),1)
 EXTRA_ARGS += --coverage
 endif
 
+
+# ============================================================
+# RV32I firmware build
+# ============================================================
+
+RISCV_PREFIX ?= riscv64-unknown-elf-
+RISCV_GCC     := $(RISCV_PREFIX)gcc
+RISCV_OBJCOPY := $(RISCV_PREFIX)objcopy
+
+FIRMWARE_SRC := $(FIRMWARE_DIR)/start.S
+FIRMWARE_LD  := $(FIRMWARE_DIR)/link.ld
+FIRMWARE_ELF := $(FIRMWARE_DIR)/start.elf
+FIRMWARE_BIN := $(FIRMWARE_DIR)/start.bin
+FIRMWARE_HEX := $(FIRMWARE_DIR)/start.hex
+FIRMWARE_MAP := $(FIRMWARE_DIR)/start.map
+
+FIRMWARE_DEPTH_WORDS ?= 1024
+FIRMWARE_FILL_WORD   ?= 0x00000013
+
+.PHONY: firmware
+firmware: $(FIRMWARE_HEX)
+
+$(FIRMWARE_ELF): $(FIRMWARE_SRC) $(FIRMWARE_LD)
+	@command -v $(RISCV_GCC) >/dev/null 2>&1 || \
+		(echo "ERROR: Missing $(RISCV_GCC)" && exit 1)
+	$(RISCV_GCC) \
+		-march=rv32i \
+		-mabi=ilp32 \
+		-nostdlib \
+		-nostartfiles \
+		-Wl,--build-id=none \
+		-Wl,-Map,$(FIRMWARE_MAP) \
+		-Wl,-T,$(FIRMWARE_LD) \
+		$(FIRMWARE_SRC) \
+		-o $(FIRMWARE_ELF)
+
+$(FIRMWARE_BIN): $(FIRMWARE_ELF)
+	@command -v $(RISCV_OBJCOPY) >/dev/null 2>&1 || \
+		(echo "ERROR: Missing $(RISCV_OBJCOPY)" && exit 1)
+	$(RISCV_OBJCOPY) \
+		-O binary \
+		$(FIRMWARE_ELF) \
+		$(FIRMWARE_BIN)
+
+$(FIRMWARE_HEX): $(FIRMWARE_BIN) $(SCRIPT_DIR)/bin_to_hex.py
+	python3 $(SCRIPT_DIR)/bin_to_hex.py \
+		$(FIRMWARE_BIN) \
+		$(FIRMWARE_HEX) \
+		--depth $(FIRMWARE_DEPTH_WORDS) \
+		--fill $(FIRMWARE_FILL_WORD)
+
 # ============================================================
 # Default target
 # ============================================================
@@ -231,6 +282,7 @@ help:
 	@echo "  make regression_rv32i      Run RV32I unit/core regression"
 	@echo "  make lint_soc              Lint integrated RV32I AXI-Lite SoC"
 	@echo "  make test_soc              Run firmware-driven SoC smoke test"
+	@echo "  make firmware              Build start.elf/bin/hex firmware image"
 	@echo "  make regression_all        Run AXI-Lite, RV32I, and SoC regressions"
 	@echo ""
 	@echo "RV32I waveforms:"
@@ -266,6 +318,8 @@ status:
 	@which python3 || true
 	@which cocotb-config || true
 	@which yosys || true
+	@which $(RISCV_GCC) || true
+	@which $(RISCV_OBJCOPY) || true
 	@echo ""
 
 # ============================================================
@@ -491,7 +545,7 @@ test_rv32i_axi_master:
 		SIM_BUILD=sim_build/rv32i_axi_master
 
 .PHONY: test_soc
-test_soc:
+test_soc: firmware
 	@for file in $(SOC_TOP_SOURCES); do \
 		test -f "$$file" || \
 		(echo "ERROR: Missing $$file" && exit 1); \
@@ -786,6 +840,10 @@ clean::
 	rm -f coverage.info
 	rm -rf coverage_annotated
 	rm -rf coverage_html
+	rm -f $(FIRMWARE_ELF)
+	rm -f $(FIRMWARE_BIN)
+	rm -f $(FIRMWARE_HEX)
+	rm -f $(FIRMWARE_MAP)
 
 # ============================================================
 # Include cocotb simulator Makefile for cocotb sim/results targets
