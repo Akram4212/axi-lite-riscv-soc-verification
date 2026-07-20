@@ -203,20 +203,31 @@ RISCV_PREFIX ?= riscv64-unknown-elf-
 RISCV_GCC     := $(RISCV_PREFIX)gcc
 RISCV_OBJCOPY := $(RISCV_PREFIX)objcopy
 
-FIRMWARE_SRC := $(FIRMWARE_DIR)/start.S
+# Select with:
+#   make test_soc FIRMWARE=start
+#   make test_soc FIRMWARE=memory_test
+FIRMWARE ?= start
+
 FIRMWARE_LD  := $(FIRMWARE_DIR)/link.ld
-FIRMWARE_ELF := $(FIRMWARE_DIR)/start.elf
-FIRMWARE_BIN := $(FIRMWARE_DIR)/start.bin
-FIRMWARE_HEX := $(FIRMWARE_DIR)/start.hex
-FIRMWARE_MAP := $(FIRMWARE_DIR)/start.map
+FIRMWARE_ELF := $(FIRMWARE_DIR)/$(FIRMWARE).elf
+FIRMWARE_BIN := $(FIRMWARE_DIR)/$(FIRMWARE).bin
+FIRMWARE_HEX := $(FIRMWARE_DIR)/$(FIRMWARE).hex
+FIRMWARE_MAP := $(FIRMWARE_DIR)/$(FIRMWARE).map
+
+.PRECIOUS: $(FIRMWARE_DIR)/%.elf $(FIRMWARE_DIR)/%.bin
+
+SELECTED_FIRMWARE_HEX := $(FIRMWARE_DIR)/selected.hex
 
 FIRMWARE_DEPTH_WORDS ?= 1024
 FIRMWARE_FILL_WORD   ?= 0x00000013
 
 .PHONY: firmware
 firmware: $(FIRMWARE_HEX)
+	cp $(FIRMWARE_HEX) $(SELECTED_FIRMWARE_HEX)
+	@echo "Selected firmware: $(FIRMWARE)"
+	@echo "RAM image: $(SELECTED_FIRMWARE_HEX)"
 
-$(FIRMWARE_ELF): $(FIRMWARE_SRC) $(FIRMWARE_LD)
+$(FIRMWARE_DIR)/%.elf: $(FIRMWARE_DIR)/%.S $(FIRMWARE_LD)
 	@command -v $(RISCV_GCC) >/dev/null 2>&1 || \
 		(echo "ERROR: Missing $(RISCV_GCC)" && exit 1)
 	$(RISCV_GCC) \
@@ -225,23 +236,25 @@ $(FIRMWARE_ELF): $(FIRMWARE_SRC) $(FIRMWARE_LD)
 		-nostdlib \
 		-nostartfiles \
 		-Wl,--build-id=none \
-		-Wl,-Map,$(FIRMWARE_MAP) \
+		-Wl,-Map,$(basename $@).map \
 		-Wl,-T,$(FIRMWARE_LD) \
-		$(FIRMWARE_SRC) \
-		-o $(FIRMWARE_ELF)
+		$< \
+		-o $@
 
-$(FIRMWARE_BIN): $(FIRMWARE_ELF)
+$(FIRMWARE_DIR)/%.bin: $(FIRMWARE_DIR)/%.elf
 	@command -v $(RISCV_OBJCOPY) >/dev/null 2>&1 || \
 		(echo "ERROR: Missing $(RISCV_OBJCOPY)" && exit 1)
 	$(RISCV_OBJCOPY) \
 		-O binary \
-		$(FIRMWARE_ELF) \
-		$(FIRMWARE_BIN)
+		$< \
+		$@
 
-$(FIRMWARE_HEX): $(FIRMWARE_BIN) $(SCRIPT_DIR)/bin_to_hex.py
+$(FIRMWARE_DIR)/%.hex: \
+		$(FIRMWARE_DIR)/%.bin \
+		$(SCRIPT_DIR)/bin_to_hex.py
 	python3 $(SCRIPT_DIR)/bin_to_hex.py \
-		$(FIRMWARE_BIN) \
-		$(FIRMWARE_HEX) \
+		$< \
+		$@ \
 		--depth $(FIRMWARE_DEPTH_WORDS) \
 		--fill $(FIRMWARE_FILL_WORD)
 
@@ -567,6 +580,27 @@ test_soc: firmware
 		SIM_BUILD=sim_build/soc_top
 		
 # ============================================================
+# Firmware-driven SoC regression
+# ============================================================
+
+FIRMWARE_TESTS := start memory_test branch_test
+
+.PHONY: test_firmware_suite
+test_firmware_suite:
+	@set -e; \
+	for firmware_name in $(FIRMWARE_TESTS); do \
+		echo ""; \
+		echo "============================================================"; \
+		echo "Running firmware: $$firmware_name"; \
+		echo "============================================================"; \
+		$(MAKE) test_soc FIRMWARE=$$firmware_name; \
+	done
+	@echo ""
+	@echo "============================================================"
+	@echo "All firmware-driven SoC tests passed."
+	@echo "============================================================"
+
+# ============================================================
 # RV32I cocotb simulation targets
 # ============================================================
 
@@ -701,7 +735,7 @@ regression_all:
 	$(MAKE) regression
 	$(MAKE) regression_rv32i
 	$(MAKE) lint_soc
-	$(MAKE) test_soc
+	$(MAKE) test_firmware_suite
 	@echo ""
 	@echo "============================================================"
 	@echo "Complete AXI-Lite, RV32I, and full-SoC regression passed."
@@ -840,10 +874,10 @@ clean::
 	rm -f coverage.info
 	rm -rf coverage_annotated
 	rm -rf coverage_html
-	rm -f $(FIRMWARE_ELF)
-	rm -f $(FIRMWARE_BIN)
-	rm -f $(FIRMWARE_HEX)
-	rm -f $(FIRMWARE_MAP)
+	rm -f $(FIRMWARE_DIR)/*.elf
+	rm -f $(FIRMWARE_DIR)/*.bin
+	rm -f $(FIRMWARE_DIR)/*.hex
+	rm -f $(FIRMWARE_DIR)/*.map
 
 # ============================================================
 # Include cocotb simulator Makefile for cocotb sim/results targets
