@@ -583,7 +583,7 @@ test_soc: firmware
 # Firmware-driven SoC regression
 # ============================================================
 
-FIRMWARE_TESTS := start memory_test branch_test
+FIRMWARE_TESTS := start memory_test branch_test gpio_test timer_test
 
 .PHONY: test_firmware_suite
 test_firmware_suite:
