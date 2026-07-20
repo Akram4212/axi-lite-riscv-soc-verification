@@ -27,7 +27,7 @@ module soc_top_wrapper (
     soc_top #(
         .PC_INIT      (32'h0000_0000),
         .RAM_BYTES    (4096),
-        .RAM_INIT_FILE("firmware/start.hex")
+        .RAM_INIT_FILE("firmware/selected.hex")
     ) dut (
         .CLK                  (CLK),
         .nRST                 (nRST),
