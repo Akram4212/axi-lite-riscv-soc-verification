@@ -1,7 +1,7 @@
-`ifndef CPU_TYPES_PKG_VH
-`define CPU_TYPES_PKG_VH
+`ifndef RV32I_PKG_VH
+`define RV32I_PKG_VH
 
-package cpu_types_pkg;
+package rv32i_pkg;
 
   // word width and size
   parameter WORD_W    = 32;
@@ -45,7 +45,8 @@ package cpu_types_pkg;
     LUI       = 7'b0110111,
     AUIPC     = 7'b0010111,
     LR_SC     = 7'b0101111,
-    HALT      = 7'b1111111
+    OPCODE_MISC_MEM = 7'b0001111,  // FENCE
+    OPCODE_SYSTEM   = 7'b1110011  // ECALL, EBREAK
   } opcode_t;
 
   typedef enum logic[4:0] {
@@ -53,6 +54,15 @@ package cpu_types_pkg;
     SC = 5'h03
   } funct5_atomic_t;
   
+  typedef enum logic [2:0] {
+    IMM_I    = 3'b000,
+    IMM_S    = 3'b001,
+    IMM_B    = 3'b010,
+    IMM_U    = 3'b011,
+    IMM_J    = 3'b100,
+    IMM_NONE = 3'b111
+} imm_type_t;
+
   // r/itype funct3 op type
   typedef enum logic [FUNC3_W-1:0] {
     SLL     = 3'h1,
@@ -228,4 +238,5 @@ package cpu_types_pkg;
   } icache_frame;
 
 endpackage
-`endif //CPU_TYPES_PKG_VH
+`endif // RV32I_PKG_VH
+

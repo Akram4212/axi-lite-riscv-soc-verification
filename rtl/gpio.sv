@@ -87,20 +87,26 @@ module gpio #(
     // AXI-Lite write address and write data can arrive in
     // different cycles, so we store them until both are valid.
     // ========================================================
-    logic [ADDR_WIDTH-1:0]     awaddr_buf;
-    logic [DATA_WIDTH-1:0]     wdata_buf;
+   /* logic [ADDR_WIDTH-1:0]     awaddr_buf;
+    // Upper address bits are intentionally unused inside this local GPIO slave.
+    // The SoC-level AXI-Lite interconnect will handle full address decoding.*/
+    logic unused_addr_bits;
+
+    assign unused_addr_bits = &{
+        1'b0,
+        S_AXI_AWADDR[ADDR_WIDTH-1:6],
+        S_AXI_ARADDR[ADDR_WIDTH-1:6]
+    };
+    /*logic [DATA_WIDTH-1:0]     wdata_buf;
     logic [(DATA_WIDTH/8)-1:0] wstrb_buf;
 
     logic awaddr_valid;
-    logic wdata_valid;
+    logic wdata_valid;*/
 
     // Ready when this slave is not already holding that part
     // of the write transaction and not waiting for B response.
-    assign S_AXI_AWREADY = (!awaddr_valid) && (!S_AXI_BVALID);
-    assign S_AXI_WREADY  = (!wdata_valid)  && (!S_AXI_BVALID);
-
-    // Read address ready when not already holding valid read data.
-    assign S_AXI_ARREADY = !S_AXI_RVALID;
+    assign S_AXI_AWREADY = !S_AXI_BVALID;
+    assign S_AXI_WREADY  = !S_AXI_BVALID;
 
     // ========================================================
     // Byte-strobe helper
@@ -163,15 +169,14 @@ module gpio #(
     // ========================================================
     // AXI4-Lite Write Logic
     // ========================================================
-      always_ff @(posedge ACLK, negedge ARESETn) begin
+
+    logic write_fire;
+
+    assign write_fire = S_AXI_AWVALID && S_AXI_AWREADY &&
+                        S_AXI_WVALID  && S_AXI_WREADY;
+
+    always_ff @(posedge ACLK) begin
         if (!ARESETn) begin
-            awaddr_buf   <= '0;
-            wdata_buf    <= '0;
-            wstrb_buf    <= '0;
-
-            awaddr_valid <= 1'b0;
-            wdata_valid  <= 1'b0;
-
             S_AXI_BVALID <= 1'b0;
             S_AXI_BRESP  <= `GPIO_AXI_RESP_OKAY;
 
@@ -180,105 +185,54 @@ module gpio #(
         end else begin
 
             // ------------------------------------------------
-            // Capture write address
+            // Perform write when AW and W handshake together
             // ------------------------------------------------
-            if (S_AXI_AWVALID && S_AXI_AWREADY) begin
-                awaddr_buf   <= S_AXI_AWADDR;
-                awaddr_valid <= 1'b1;
-            end
-
-            // ------------------------------------------------
-            // Capture write data
-            // ------------------------------------------------
-            if (S_AXI_WVALID && S_AXI_WREADY) begin
-                wdata_buf   <= S_AXI_WDATA;
-                wstrb_buf   <= S_AXI_WSTRB;
-                wdata_valid <= 1'b1;
-            end
-
-            // ------------------------------------------------
-            // Perform write once both AWADDR and WDATA arrived
-            // ------------------------------------------------
-            if (awaddr_valid && wdata_valid && !S_AXI_BVALID) begin
+            if (write_fire && !S_AXI_BVALID) begin
                 S_AXI_BVALID <= 1'b1;
                 S_AXI_BRESP  <= `GPIO_AXI_RESP_OKAY;
 
-                // Word alignment check
-                if (awaddr_buf[1:0] != 2'b00) begin
+                if (S_AXI_AWADDR[1:0] != 2'b00) begin
                     S_AXI_BRESP <= `GPIO_AXI_RESP_SLVERR;
                 end else begin
-                    case (awaddr_buf[5:0])
 
-                        // ------------------------------------
-                        // DATA_OUT register
-                        // Address offset 0x00
-                        // ------------------------------------
+                    case (S_AXI_AWADDR[5:0])
+
                         `GPIO_REG_DATA_OUT: begin
                             data_out_reg <= apply_wstrb(
                                 data_out_reg,
-                                wdata_buf,
-                                wstrb_buf
+                                S_AXI_WDATA,
+                                S_AXI_WSTRB
                             );
                         end
 
-                        // ------------------------------------
-                        // DATA_DIR register
-                        // Address offset 0x08
-                        //
-                        // 1 = output
-                        // 0 = input
-                        // ------------------------------------
                         `GPIO_REG_DATA_DIR: begin
                             data_dir_reg <= apply_wstrb(
                                 data_dir_reg,
-                                wdata_buf,
-                                wstrb_buf
+                                S_AXI_WDATA,
+                                S_AXI_WSTRB
                             );
                         end
 
-                        // ------------------------------------
-                        // DATA_OUT_SET register
-                        // Address offset 0x0C
-                        //
-                        // Writing 1 sets the corresponding bit.
-                        // Writing 0 leaves the bit unchanged.
-                        // ------------------------------------
                         `GPIO_REG_DATA_OUT_SET: begin
                             data_out_reg <= data_out_reg |
-                                            strobe_mask_data(wdata_buf, wstrb_buf);
+                                            strobe_mask_data(S_AXI_WDATA, S_AXI_WSTRB);
                         end
 
-                        // ------------------------------------
-                        // DATA_OUT_CLR register
-                        // Address offset 0x10
-                        //
-                        // Writing 1 clears the corresponding bit.
-                        // Writing 0 leaves the bit unchanged.
-                        // ------------------------------------
                         `GPIO_REG_DATA_OUT_CLR: begin
                             data_out_reg <= data_out_reg &
-                                            ~strobe_mask_data(wdata_buf, wstrb_buf);
+                                            ~strobe_mask_data(S_AXI_WDATA, S_AXI_WSTRB);
                         end
 
-                        // ------------------------------------
-                        // DATA_IN is read-only
-                        // ------------------------------------
                         `GPIO_REG_DATA_IN: begin
                             S_AXI_BRESP <= `GPIO_AXI_RESP_SLVERR;
                         end
 
-                        // ------------------------------------
-                        // Invalid register offset
-                        // ------------------------------------
                         default: begin
                             S_AXI_BRESP <= `GPIO_AXI_RESP_SLVERR;
                         end
 
                     endcase
                 end
-
-                awaddr_valid <= 1'b0;
-                wdata_valid  <= 1'b0;
             end
 
             // ------------------------------------------------
@@ -294,6 +248,9 @@ module gpio #(
     // ========================================================
     // AXI4-Lite Read Logic
     // ========================================================
+
+    assign S_AXI_ARREADY = !S_AXI_RVALID;
+
     always_ff @(posedge ACLK) begin
         if (!ARESETn) begin
             S_AXI_RVALID <= 1'b0;
@@ -301,47 +258,36 @@ module gpio #(
             S_AXI_RRESP  <= `GPIO_AXI_RESP_OKAY;
         end else begin
 
-            // ------------------------------------------------
-            // Accept read address
-            // ------------------------------------------------
-            if (S_AXI_ARVALID && S_AXI_ARREADY) begin
-                S_AXI_RVALID <= 1'b1;
-                S_AXI_RDATA  <= '0;
+            // Complete read response first
+            if (S_AXI_RVALID && S_AXI_RREADY) begin
+                S_AXI_RVALID <= 1'b0;
                 S_AXI_RRESP  <= `GPIO_AXI_RESP_OKAY;
+            end
 
-                // Word alignment check
+            // Accept new read address only when no response is pending
+            else if (S_AXI_ARVALID && S_AXI_ARREADY) begin
+                S_AXI_RVALID <= 1'b1;
+                S_AXI_RRESP  <= `GPIO_AXI_RESP_OKAY;
+                S_AXI_RDATA  <= '0;
+
                 if (S_AXI_ARADDR[1:0] != 2'b00) begin
-                    S_AXI_RDATA <= '0;
                     S_AXI_RRESP <= `GPIO_AXI_RESP_SLVERR;
+                    S_AXI_RDATA <= '0;
                 end else begin
                     case (S_AXI_ARADDR[5:0])
 
-                        // ------------------------------------
-                        // Read DATA_OUT
-                        // ------------------------------------
                         `GPIO_REG_DATA_OUT: begin
                             S_AXI_RDATA <= data_out_reg;
                         end
 
-                        // ------------------------------------
-                        // Read DATA_IN
-                        // Comes directly from external pins
-                        // ------------------------------------
                         `GPIO_REG_DATA_IN: begin
                             S_AXI_RDATA <= gpio_i;
                         end
 
-                        // ------------------------------------
-                        // Read DATA_DIR
-                        // ------------------------------------
                         `GPIO_REG_DATA_DIR: begin
                             S_AXI_RDATA <= data_dir_reg;
                         end
 
-                        // ------------------------------------
-                        // SET and CLR are write-only helper regs.
-                        // Reading them returns 0.
-                        // ------------------------------------
                         `GPIO_REG_DATA_OUT_SET: begin
                             S_AXI_RDATA <= '0;
                         end
@@ -350,9 +296,6 @@ module gpio #(
                             S_AXI_RDATA <= '0;
                         end
 
-                        // ------------------------------------
-                        // Invalid register offset
-                        // ------------------------------------
                         default: begin
                             S_AXI_RDATA <= '0;
                             S_AXI_RRESP <= `GPIO_AXI_RESP_SLVERR;
@@ -361,15 +304,6 @@ module gpio #(
                     endcase
                 end
             end
-
-            // ------------------------------------------------
-            // Complete read transaction
-            // ------------------------------------------------
-            if (S_AXI_RVALID && S_AXI_RREADY) begin
-                S_AXI_RVALID <= 1'b0;
-                S_AXI_RRESP  <= `GPIO_AXI_RESP_OKAY;
-            end
         end
     end
-
 endmodule
