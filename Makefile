@@ -312,6 +312,7 @@ help:
 	@echo "  make clean                 Remove generated files"
 	@echo ""
 	@echo "  make coverage_rv32i_core   Run core tests with RTL coverage"
+	@echo "  make coverage_soc          Run merged full-SoC firmware coverage"
 
 # ============================================================
 # Status / tool checks
@@ -577,8 +578,9 @@ test_soc: firmware
 			-Wno-TIMESCALEMOD \
 			-Wno-UNUSEDSIGNAL \
 			-Wno-UNDRIVEN" \
+			SIM_ARGS="$(SIM_ARGS)" \
 		SIM_BUILD=sim_build/soc_top
-		
+
 # ============================================================
 # Firmware-driven SoC regression
 # ============================================================
@@ -599,6 +601,47 @@ test_firmware_suite:
 	@echo "============================================================"
 	@echo "All firmware-driven SoC tests passed."
 	@echo "============================================================"
+
+# ============================================================
+# Full-SoC firmware coverage
+# ============================================================
+
+SOC_COVERAGE_DIR := $(PWD_DIR)/coverage_soc
+
+.PHONY: coverage_soc
+coverage_soc:
+	$(MAKE) clean
+	@mkdir -p "$(SOC_COVERAGE_DIR)"
+	@set -e; \
+	for firmware_name in $(FIRMWARE_TESTS); do \
+		echo ""; \
+		echo "============================================================"; \
+		echo "Coverage firmware: $$firmware_name"; \
+		echo "============================================================"; \
+		SIM_ARGS="+verilator+coverage+file+$(SOC_COVERAGE_DIR)/$$firmware_name.dat" \
+			$(MAKE) test_soc \
+				FIRMWARE=$$firmware_name \
+				HDL_COVERAGE=1; \
+	done
+	@echo ""
+	@echo "Merging firmware coverage databases..."
+	verilator_coverage \
+		--write "$(SOC_COVERAGE_DIR)/merged.dat" \
+		$(SOC_COVERAGE_DIR)/*.dat
+	verilator_coverage \
+		--write-info "$(SOC_COVERAGE_DIR)/coverage.info" \
+		"$(SOC_COVERAGE_DIR)/merged.dat"
+	genhtml \
+		--branch-coverage \
+		"$(SOC_COVERAGE_DIR)/coverage.info" \
+		--output-directory "$(SOC_COVERAGE_DIR)/html"
+	@echo ""
+	lcov \
+		--summary "$(SOC_COVERAGE_DIR)/coverage.info" \
+		--branch-coverage
+	@echo ""
+	@echo "Coverage report:"
+	@echo "  $(SOC_COVERAGE_DIR)/html/index.html"
 
 # ============================================================
 # RV32I cocotb simulation targets
@@ -878,7 +921,7 @@ clean::
 	rm -f $(FIRMWARE_DIR)/*.bin
 	rm -f $(FIRMWARE_DIR)/*.hex
 	rm -f $(FIRMWARE_DIR)/*.map
-
+	rm -rf coverage_soc
 # ============================================================
 # Include cocotb simulator Makefile for cocotb sim/results targets
 # ============================================================
